@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import axios from 'axios';
+import { API_BASE_URL } from '../../utils/api';
 import {
   FiDollarSign,
   FiUsers,
@@ -47,12 +48,12 @@ const AccountantDashboard = () => {
   const fetchData = async () => {
     try {
       const [eventsRes, notificationsRes, classesRes, feesRes, finesRes, studentsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/events'),
-        axios.get('http://localhost:5000/api/notifications'),
-        axios.get('http://localhost:5000/api/classes'),
-        axios.get('http://localhost:5000/api/fees'),
-        axios.get('http://localhost:5000/api/fines').catch(() => ({ data: [] })),
-        axios.get('http://localhost:5000/api/students')
+        axios.get('${API_BASE_URL}/api/events'),
+        axios.get('${API_BASE_URL}/api/notifications'),
+        axios.get('${API_BASE_URL}/api/classes'),
+        axios.get('${API_BASE_URL}/api/fees'),
+        axios.get('${API_BASE_URL}/api/fines').catch(() => ({ data: [] })),
+        axios.get('${API_BASE_URL}/api/students')
       ]);
       setEvents(eventsRes.data.slice(0, 5));
       setNotifications(notificationsRes.data.slice(0, 5));
@@ -71,7 +72,7 @@ const AccountantDashboard = () => {
       return;
     }
     try {
-      const res = await axios.get(`http://localhost:5000/api/students/search?q=${encodeURIComponent(query)}`);
+      const res = await axios.get(`${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}`);
       setSearchResults(res.data);
     } catch (error) {
       console.error('Error searching students:', error);
@@ -88,7 +89,7 @@ const AccountantDashboard = () => {
 
   const fetchStudentsByClass = async (className) => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/fees/class/${className}`);
+      const res = await axios.get(`${API_BASE_URL}/api/fees/class/${className}`);
       setClassStudents(res.data);
     } catch (error) {
       console.error('Error fetching students by class:', error);
@@ -99,7 +100,7 @@ const AccountantDashboard = () => {
   const handleSubmitFee = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/fees', {
+      await axios.post('${API_BASE_URL}/api/fees', {
         studentId: feeForm.selectedStudent,
         amount: feeForm.amount,
         feesType: feeForm.feesType,
@@ -114,7 +115,7 @@ const AccountantDashboard = () => {
       if (feeForm.feeCategory === 'regular' && feeForm.transportAmount) {
         const selectedStudent = students.find(s => s._id.toString() === feeForm.selectedStudent);
         if (selectedStudent && selectedStudent.studentType === 'dayScholar' && selectedStudent.transportOpted) {
-          await axios.post('http://localhost:5000/api/fees', {
+          await axios.post('${API_BASE_URL}/api/fees', {
             studentId: feeForm.selectedStudent,
             amount: feeForm.transportAmount,
             feesType: feeForm.feesType,
@@ -146,7 +147,7 @@ const AccountantDashboard = () => {
   const handleDeleteFee = async (id) => {
     if (!window.confirm('Are you sure you want to delete this fee?')) return;
     try {
-      await axios.delete(`http://localhost:5000/api/fees/${id}`);
+      await axios.delete(`${API_BASE_URL}/api/fees/${id}`);
       fetchData();
     } catch (error) {
       console.error('Error deleting fee:', error);

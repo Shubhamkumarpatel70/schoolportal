@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL } from '../utils/api';
 import { FiBell, FiInfo, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 
 const Notifications = () => {
@@ -20,7 +21,7 @@ const Notifications = () => {
 
   const fetchNotifications = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/notifications');
+      const res = await axios.get('${API_BASE_URL}/api/notifications');
       setNotifications(res.data);
     } catch (error) {
       console.error('Error fetching notifications:', error);

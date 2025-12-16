@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import axios from 'axios';
+import { API_BASE_URL } from '../utils/api';
 import { FiUserPlus, FiUser, FiMail, FiLock, FiPhone, FiMapPin, FiCheckCircle } from 'react-icons/fi';
 
 const Register = () => {
@@ -37,7 +38,7 @@ const Register = () => {
     }
     setValidatingEnrollment(true);
     try {
-      const res = await axios.get(`http://localhost:5000/api/enrollmentNumbers/check/${enrollmentNumber}`);
+      const res = await axios.get(`${API_BASE_URL}/api/enrollmentNumbers/check/${enrollmentNumber}`);
       if (res.data.valid) {
         setEnrollmentValid(true);
         if (res.data.name && !formData.name) {

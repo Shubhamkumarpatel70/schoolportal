@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import axios from 'axios';
+import { API_BASE_URL } from '../../utils/api';
 import {
   FiUsers,
   FiBook,
@@ -64,7 +65,7 @@ const TeacherDashboard = () => {
       setEnrollmentLoading(true);
       setEnrollmentDetails(null);
       try {
-        const res = await axios.get(`http://localhost:5000/api/enrollmentNumbers/details/${studentForm.enrollmentNumber}`);
+        const res = await axios.get(`${API_BASE_URL}/api/enrollmentNumbers/details/${studentForm.enrollmentNumber}`);
         if (res.data) {
           setEnrollmentDetails(res.data);
           if (res.data.name) {
@@ -103,10 +104,10 @@ const TeacherDashboard = () => {
   const fetchData = async () => {
     try {
       const [eventsRes, notificationsRes, classTeacherRes, studentsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/events'),
-        axios.get('http://localhost:5000/api/notifications'),
-        axios.get(`http://localhost:5000/api/classTeachers/teacher/${user?._id || user?.id}`).catch(() => ({ data: null })),
-        axios.get('http://localhost:5000/api/students').catch(() => ({ data: [] }))
+        axios.get('${API_BASE_URL}/api/events'),
+        axios.get('${API_BASE_URL}/api/notifications'),
+        axios.get(`${API_BASE_URL}/api/classTeachers/teacher/${user?._id || user?.id}`).catch(() => ({ data: null })),
+        axios.get('${API_BASE_URL}/api/students').catch(() => ({ data: [] }))
       ]);
       const classTeacherData = classTeacherRes.data;
       const studentsData = studentsRes.data || [];
@@ -123,7 +124,7 @@ const TeacherDashboard = () => {
       // Fetch exam results if class is assigned
       if (classTeacherData) {
         try {
-          const examRes = await axios.get(`http://localhost:5000/api/examResults/class/${classTeacherData.className}`);
+          const examRes = await axios.get(`${API_BASE_URL}/api/examResults/class/${classTeacherData.className}`);
           setExamResults(examRes.data);
         } catch (error) {
           console.error('Error fetching exam results:', error);
@@ -148,11 +149,11 @@ const TeacherDashboard = () => {
     e.preventDefault();
     try {
       if (editingStudent) {
-        await axios.put(`http://localhost:5000/api/students/${editingStudent._id}`, studentForm);
+        await axios.put(`${API_BASE_URL}/api/students/${editingStudent._id}`, studentForm);
         setEditingStudent(null);
         alert('Student updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/students', studentForm);
+        await axios.post('${API_BASE_URL}/api/students', studentForm);
         alert('Student added successfully!');
       }
       setShowStudentForm(false);
@@ -173,7 +174,7 @@ const TeacherDashboard = () => {
     setEditingStudent(student);
     setEnrollmentDetails(null); // Clear enrollment details when editing
     try {
-      const userRes = await axios.get(`http://localhost:5000/api/users/${student.userId._id || student.userId}`);
+      const userRes = await axios.get(`${API_BASE_URL}/api/users/${student.userId._id || student.userId}`);
       setStudentForm({
         studentName: student.studentName,
         fathersName: student.fathersName,
@@ -208,7 +209,7 @@ const TeacherDashboard = () => {
   const handleDeleteStudent = async (id) => {
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     try {
-      await axios.delete(`http://localhost:5000/api/students/${id}`);
+      await axios.delete(`${API_BASE_URL}/api/students/${id}`);
       fetchData();
     } catch (error) {
       console.error('Error deleting student:', error);
@@ -535,7 +536,7 @@ const TeacherDashboard = () => {
                         return;
                       }
 
-                      await axios.post('http://localhost:5000/api/examResults', {
+                      await axios.post('${API_BASE_URL}/api/examResults', {
                         results,
                         className: classTeacher.className,
                         examType: examResultForm.examType,
@@ -717,7 +718,7 @@ const TeacherDashboard = () => {
                                                       alert('Percentage must be between 0 and 100');
                                                       return;
                                                     }
-                                                    await axios.put(`http://localhost:5000/api/examResults/${result._id}`, {
+                                                    await axios.put(`${API_BASE_URL}/api/examResults/${result._id}`, {
                                                       examPercent: newPercent
                                                     });
                                                     alert('Result updated successfully!');
@@ -763,7 +764,7 @@ const TeacherDashboard = () => {
                                                 onClick={async () => {
                                                   if (window.confirm('Are you sure you want to delete this exam result?')) {
                                                     try {
-                                                      await axios.delete(`http://localhost:5000/api/examResults/${result._id}`);
+                                                      await axios.delete(`${API_BASE_URL}/api/examResults/${result._id}`);
                                                       alert('Result deleted successfully!');
                                                       fetchData();
                                                     } catch (error) {

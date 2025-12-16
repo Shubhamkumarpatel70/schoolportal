@@ -3,6 +3,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import { API_BASE_URL } from '../utils/api';
 import { FiBook, FiUsers, FiAward, FiTrendingUp, FiChevronLeft, FiChevronRight, FiCalendar, FiBell } from 'react-icons/fi';
 
 const Home = () => {
@@ -28,7 +29,7 @@ const Home = () => {
 
   const fetchCarousel = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/carousel');
+      const res = await axios.get('${API_BASE_URL}/api/carousel');
       setCarouselImages(res.data);
     } catch (error) {
       console.error('Error fetching carousel:', error);
@@ -37,7 +38,7 @@ const Home = () => {
 
   const fetchEvents = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/events');
+      const res = await axios.get('${API_BASE_URL}/api/events');
       setEvents(res.data.slice(0, 3));
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -47,7 +48,7 @@ const Home = () => {
   const fetchNotifications = async () => {
     try {
       // Notifications endpoint requires auth, so we'll catch the error gracefully
-      const res = await axios.get('http://localhost:5000/api/notifications').catch(() => ({ data: [] }));
+      const res = await axios.get('${API_BASE_URL}/api/notifications').catch(() => ({ data: [] }));
       setNotifications(res.data?.slice(0, 3) || []);
     } catch (error) {
       console.error('Error fetching notifications:', error);

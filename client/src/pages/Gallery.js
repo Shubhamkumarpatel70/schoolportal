@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import axios from 'axios';
+import { API_BASE_URL } from '../utils/api';
 import { FiImage } from 'react-icons/fi';
 
 const Gallery = () => {
@@ -14,7 +15,7 @@ const Gallery = () => {
 
   const fetchGalleryImages = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/gallery');
+      const res = await axios.get('${API_BASE_URL}/api/gallery');
       setGalleryImages(res.data);
     } catch (error) {
       console.error('Error fetching gallery images:', error);

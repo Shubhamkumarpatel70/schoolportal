@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import axios from 'axios';
+import { API_BASE_URL } from '../../utils/api';
 import {
   FiUsers, FiCalendar, FiBell, FiImage, FiMail, FiFileText, FiUserPlus,
   FiMenu, FiX, FiSettings, FiUpload, FiEdit, FiTrash2, FiDollarSign, FiAward
@@ -107,7 +108,7 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const res = await axios.get(`http://localhost:5000/api/students/search?q=${encodeURIComponent(query)}`);
+      const res = await axios.get(`${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}`);
       setFeeSearchResults(res.data);
     } catch (error) {
       console.error('Error searching students:', error);
@@ -121,7 +122,7 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const res = await axios.get(`http://localhost:5000/api/teachers/search?q=${encodeURIComponent(query)}`);
+      const res = await axios.get(`${API_BASE_URL}/api/teachers/search?q=${encodeURIComponent(query)}`);
       setTeacherSearchResults(res.data);
     } catch (error) {
       console.error('Error searching teachers:', error);
@@ -152,7 +153,7 @@ const AdminDashboard = () => {
       setEnrollmentLoading(true);
       setEnrollmentDetails(null);
       try {
-        const res = await axios.get(`http://localhost:5000/api/enrollmentNumbers/details/${studentForm.enrollmentNumber}`);
+        const res = await axios.get(`${API_BASE_URL}/api/enrollmentNumbers/details/${studentForm.enrollmentNumber}`);
         if (res.data) {
           setEnrollmentDetails(res.data);
           if (res.data.name) {
@@ -184,19 +185,19 @@ const AdminDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const [usersRes, eventsRes, notificationsRes, contactsRes, carouselRes, galleryRes, studentsRes, classesRes, feesRes, finesRes, classTeachersRes, enrollmentNumbersRes, teachersRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/users'),
-        axios.get('http://localhost:5000/api/events'),
-        axios.get('http://localhost:5000/api/notifications'),
-        axios.get('http://localhost:5000/api/contacts'),
-        axios.get('http://localhost:5000/api/carousel/all'),
-        axios.get('http://localhost:5000/api/gallery'),
-        axios.get('http://localhost:5000/api/students'),
-        axios.get('http://localhost:5000/api/classes'),
-        axios.get('http://localhost:5000/api/fees'),
-        axios.get('http://localhost:5000/api/fines'),
-        axios.get('http://localhost:5000/api/classTeachers'),
-        axios.get('http://localhost:5000/api/enrollmentNumbers'),
-        axios.get('http://localhost:5000/api/teachers')
+        axios.get(`${API_BASE_URL}/api/users`),
+        axios.get(`${API_BASE_URL}/api/events`),
+        axios.get(`${API_BASE_URL}/api/notifications`),
+        axios.get(`${API_BASE_URL}/api/contacts`),
+        axios.get(`${API_BASE_URL}/api/carousel/all`),
+        axios.get(`${API_BASE_URL}/api/gallery`),
+        axios.get(`${API_BASE_URL}/api/students`),
+        axios.get(`${API_BASE_URL}/api/classes`),
+        axios.get(`${API_BASE_URL}/api/fees`),
+        axios.get(`${API_BASE_URL}/api/fines`),
+        axios.get(`${API_BASE_URL}/api/classTeachers`),
+        axios.get(`${API_BASE_URL}/api/enrollmentNumbers`),
+        axios.get(`${API_BASE_URL}/api/teachers`)
       ]);
       
       setUsers(usersRes.data);
@@ -227,7 +228,7 @@ const AdminDashboard = () => {
 
   const fetchStudentsByClass = async (className) => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/fees/class/${className}`);
+      const res = await axios.get(`${API_BASE_URL}/api/fees/class/${className}`);
       setClassStudents(res.data);
     } catch (error) {
       console.error('Error fetching students by class:', error);
@@ -237,7 +238,7 @@ const AdminDashboard = () => {
 
   const handleUpdateUserRole = async (userId, newRole) => {
     try {
-      await axios.put(`http://localhost:5000/api/users/${userId}/role`, { role: newRole });
+      await axios.put(`${API_BASE_URL}/api/users/${userId}/role`, { role: newRole });
       fetchDashboardData();
     } catch (error) {
       console.error('Error updating user role:', error);
@@ -249,11 +250,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingEvent) {
-        await axios.put(`http://localhost:5000/api/events/${editingEvent._id}`, eventForm);
+        await axios.put(`${API_BASE_URL}/api/events/${editingEvent._id}`, eventForm);
         setEditingEvent(null);
         alert('Event updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/events', eventForm);
+        await axios.post('${API_BASE_URL}/api/events', eventForm);
         alert('Event created successfully!');
       }
       setShowEventForm(false);
@@ -280,11 +281,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingNotification) {
-        await axios.put(`http://localhost:5000/api/notifications/${editingNotification._id}`, notificationForm);
+        await axios.put(`${API_BASE_URL}/api/notifications/${editingNotification._id}`, notificationForm);
         setEditingNotification(null);
         alert('Notification updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/notifications', notificationForm);
+        await axios.post('${API_BASE_URL}/api/notifications', notificationForm);
         alert('Notification sent successfully!');
       }
       setShowNotificationForm(false);
@@ -311,11 +312,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingCarousel) {
-        await axios.put(`http://localhost:5000/api/carousel/${editingCarousel._id}`, carouselForm);
+        await axios.put(`${API_BASE_URL}/api/carousel/${editingCarousel._id}`, carouselForm);
         setEditingCarousel(null);
         alert('Carousel image updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/carousel', carouselForm);
+        await axios.post('${API_BASE_URL}/api/carousel', carouselForm);
         alert('Carousel image uploaded successfully!');
       }
       setShowCarouselForm(false);
@@ -344,11 +345,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingGallery) {
-        await axios.put(`http://localhost:5000/api/gallery/${editingGallery._id}`, galleryForm);
+        await axios.put(`${API_BASE_URL}/api/gallery/${editingGallery._id}`, galleryForm);
         setEditingGallery(null);
         alert('Gallery image updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/gallery', galleryForm);
+        await axios.post('${API_BASE_URL}/api/gallery', galleryForm);
         alert('Gallery image uploaded successfully!');
       }
       setShowGalleryForm(false);
@@ -377,11 +378,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingStudent) {
-        await axios.put(`http://localhost:5000/api/students/${editingStudent._id}`, studentForm);
+        await axios.put(`${API_BASE_URL}/api/students/${editingStudent._id}`, studentForm);
         setEditingStudent(null);
         alert('Student updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/students', studentForm);
+        await axios.post('${API_BASE_URL}/api/students', studentForm);
         alert('Student added successfully! Login ID: Mobile Number, Password: Enrollment Number');
       }
       setShowStudentForm(false);
@@ -402,11 +403,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingClassTeacher) {
-        await axios.put(`http://localhost:5000/api/classTeachers/${editingClassTeacher._id}`, classTeacherForm);
+        await axios.put(`${API_BASE_URL}/api/classTeachers/${editingClassTeacher._id}`, classTeacherForm);
         setEditingClassTeacher(null);
         alert('Class teacher updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/classTeachers', classTeacherForm);
+        await axios.post('${API_BASE_URL}/api/classTeachers', classTeacherForm);
         alert('Class teacher assigned successfully!');
       }
       setClassTeacherForm({ teacherId: '', className: '', section: '' });
@@ -432,11 +433,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingEnrollment) {
-        await axios.put(`http://localhost:5000/api/enrollmentNumbers/${editingEnrollment._id}`, enrollmentForm);
+        await axios.put(`${API_BASE_URL}/api/enrollmentNumbers/${editingEnrollment._id}`, enrollmentForm);
         setEditingEnrollment(null);
         alert('Enrollment number updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/enrollmentNumbers', enrollmentForm);
+        await axios.post('${API_BASE_URL}/api/enrollmentNumbers', enrollmentForm);
         alert('Enrollment number added successfully!');
       }
       setEnrollmentForm({ enrollmentNumber: '', name: '' });
@@ -460,7 +461,7 @@ const AdminDashboard = () => {
     setEnrollmentDetails(null); // Clear enrollment details when editing
     // Fetch user email
     try {
-      const userRes = await axios.get(`http://localhost:5000/api/users/${student.userId._id || student.userId}`);
+      const userRes = await axios.get(`${API_BASE_URL}/api/users/${student.userId._id || student.userId}`);
       setStudentForm({
         studentName: student.studentName,
         fathersName: student.fathersName,
@@ -498,11 +499,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingClass) {
-        await axios.put(`http://localhost:5000/api/classes/${editingClass._id}`, classForm);
+        await axios.put(`${API_BASE_URL}/api/classes/${editingClass._id}`, classForm);
         setEditingClass(null);
         alert('Class updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/classes', classForm);
+        await axios.post('${API_BASE_URL}/api/classes', classForm);
         alert('Class created successfully!');
       }
       setShowClassForm(false);
@@ -539,17 +540,17 @@ const AdminDashboard = () => {
       };
       
       if (editingFee) {
-        await axios.put(`http://localhost:5000/api/fees/${editingFee._id}`, feeData);
+        await axios.put(`${API_BASE_URL}/api/fees/${editingFee._id}`, feeData);
         setEditingFee(null);
         alert('Fee updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/fees', feeData);
+        await axios.post('${API_BASE_URL}/api/fees', feeData);
         
         // If transport fee is provided and student opted for transport, create transport fee
         if (feeForm.feeCategory === 'regular' && feeForm.transportAmount) {
           const selectedStudent = students.find(s => s._id.toString() === feeForm.selectedStudent);
           if (selectedStudent && selectedStudent.studentType === 'dayScholar' && selectedStudent.transportOpted) {
-            await axios.post('http://localhost:5000/api/fees', {
+            await axios.post('${API_BASE_URL}/api/fees', {
               studentId: feeForm.selectedStudent,
               amount: feeForm.transportAmount,
               feesType: feeForm.feesType,
@@ -610,11 +611,11 @@ const AdminDashboard = () => {
       }
       
       if (editingTeacher) {
-        await axios.put(`http://localhost:5000/api/teachers/${editingTeacher._id}`, submitData);
+        await axios.put(`${API_BASE_URL}/api/teachers/${editingTeacher._id}`, submitData);
         setEditingTeacher(null);
         alert('Teacher/Accountant updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/teachers', submitData);
+        await axios.post('${API_BASE_URL}/api/teachers', submitData);
         alert('Teacher/Accountant added successfully!');
       }
       setShowTeacherForm(false);
@@ -650,11 +651,11 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingFine) {
-        await axios.put(`http://localhost:5000/api/fines/${editingFine._id}`, fineForm);
+        await axios.put(`${API_BASE_URL}/api/fines/${editingFine._id}`, fineForm);
         setEditingFine(null);
         alert('Fine updated successfully!');
       } else {
-        await axios.post('http://localhost:5000/api/fines', fineForm);
+        await axios.post('${API_BASE_URL}/api/fines', fineForm);
         alert('Fine added successfully!');
       }
       setShowFineForm(false);
@@ -716,7 +717,7 @@ const AdminDashboard = () => {
         enrollmentNumber: `/api/enrollmentNumbers/${id}`,
         teacher: `/api/teachers/${id}`
       };
-      await axios.delete(`http://localhost:5000${endpoints[type]}`);
+      await axios.delete(`${API_BASE_URL}${endpoints[type]}`);
       fetchDashboardData();
     } catch (error) {
       console.error('Error deleting:', error);
@@ -2028,7 +2029,7 @@ const AdminDashboard = () => {
                       setSelectedClassForExam(className);
                       if (className) {
                         try {
-                          const res = await axios.get(`http://localhost:5000/api/examResults/class/${className}`);
+                          const res = await axios.get(`${API_BASE_URL}/api/examResults/class/${className}`);
                           setExamResults(res.data);
                         } catch (error) {
                           console.error('Error fetching exam results:', error);

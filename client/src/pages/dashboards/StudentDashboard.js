@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import axios from 'axios';
+import { API_BASE_URL } from '../../utils/api';
 import {
   FiBook, FiCalendar, FiBell, FiFileText, FiAward, FiClock, FiUser, FiDollarSign, FiUsers
 } from 'react-icons/fi';
@@ -61,11 +62,11 @@ const StudentDashboard = () => {
         return;
       }
       const [studentRes, feesRes, finesRes, eventsRes, notificationsRes] = await Promise.all([
-        axios.get(`http://localhost:5000/api/students/${userId}`),
-        axios.get(`http://localhost:5000/api/fees/student/${userId}`),
-        axios.get(`http://localhost:5000/api/fines/student/${userId}`).catch(() => ({ data: [] })),
-        axios.get('http://localhost:5000/api/events'),
-        axios.get('http://localhost:5000/api/notifications').catch(() => ({ data: [] }))
+        axios.get(`${API_BASE_URL}/api/students/${userId}`),
+        axios.get(`${API_BASE_URL}/api/fees/student/${userId}`),
+        axios.get(`${API_BASE_URL}/api/fines/student/${userId}`).catch(() => ({ data: [] })),
+        axios.get('${API_BASE_URL}/api/events'),
+        axios.get('${API_BASE_URL}/api/notifications').catch(() => ({ data: [] }))
       ]);
       setStudentData(studentRes.data);
       setFees(feesRes.data);
@@ -79,7 +80,7 @@ const StudentDashboard = () => {
 
   const fetchClassTeacher = async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/classTeachers/class/${studentData.class}`);
+      const res = await axios.get(`${API_BASE_URL}/api/classTeachers/class/${studentData.class}`);
       setClassTeacher(res.data);
     } catch (error) {
       console.error('Error fetching class teacher:', error);
@@ -89,7 +90,7 @@ const StudentDashboard = () => {
 
   const handlePayFee = async (feeId, paymentData) => {
     try {
-      await axios.put(`http://localhost:5000/api/fees/${feeId}/pay`, paymentData);
+      await axios.put(`${API_BASE_URL}/api/fees/${feeId}/pay`, paymentData);
       fetchData();
       alert('Fee payment submitted successfully!');
     } catch (error) {
@@ -425,7 +426,7 @@ const StudentDashboard = () => {
                                 const transactionId = prompt('Enter transaction ID (if applicable):');
                                 if (paymentMethod) {
                                   try {
-                                    await axios.put(`http://localhost:5000/api/fines/${fine._id}/pay`, { paymentMethod, transactionId: transactionId || '' });
+                                    await axios.put(`${API_BASE_URL}/api/fines/${fine._id}/pay`, { paymentMethod, transactionId: transactionId || '' });
                                     fetchData();
                                     alert('Fine payment submitted successfully!');
                                   } catch (error) {

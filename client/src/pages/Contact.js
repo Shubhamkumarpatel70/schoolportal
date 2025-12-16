@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import axios from 'axios';
+import { API_BASE_URL } from '../utils/api';
 import { FiMail, FiPhone, FiMapPin, FiSend } from 'react-icons/fi';
 
 const Contact = () => {
@@ -27,7 +28,7 @@ const Contact = () => {
     setMessage('');
     
     try {
-      await axios.post('http://localhost:5000/api/contacts', formData);
+      await axios.post('${API_BASE_URL}/api/contacts', formData);
       setMessage('Thank you for your message! We will get back to you soon.');
       setFormData({ name: '', email: '', subject: '', message: '' });
     } catch (error) {

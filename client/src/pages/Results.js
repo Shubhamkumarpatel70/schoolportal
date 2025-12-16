@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import axios from 'axios';
+import { API_BASE_URL } from '../utils/api';
 import { FiAward, FiSearch } from 'react-icons/fi';
 
 const Results = () => {
@@ -16,7 +17,7 @@ const Results = () => {
 
   const fetchClasses = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/classes');
+      const res = await axios.get('${API_BASE_URL}/api/classes');
       setClasses(res.data);
     } catch (error) {
       console.error('Error fetching classes:', error);
@@ -30,7 +31,7 @@ const Results = () => {
     }
     setLoading(true);
     try {
-      const res = await axios.get(`http://localhost:5000/api/examResults/class/${selectedClass}`);
+      const res = await axios.get(`${API_BASE_URL}/api/examResults/class/${selectedClass}`);
       setResults(res.data);
     } catch (error) {
       console.error('Error fetching results:', error);
