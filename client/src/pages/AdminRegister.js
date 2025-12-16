@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { FiUserPlus, FiMail, FiLock, FiUser } from 'react-icons/fi';
+import { API_BASE_URL } from '../utils/api';
 
 const AdminRegister = () => {
   const [formData, setFormData] = useState({
@@ -43,7 +44,7 @@ const AdminRegister = () => {
 
     try {
       // Call initial admin registration endpoint
-      await axios.post('http://localhost:5000/api/auth/register-admin-initial', {
+      await axios.post(`${API_BASE_URL}/api/auth/register-admin-initial`, {
         name: formData.name,
         email: formData.email,
         password: formData.password
