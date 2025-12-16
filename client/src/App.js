@@ -13,6 +13,7 @@ import Notifications from './pages/Notifications';
 import Results from './pages/Results';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import AdminRegister from './pages/AdminRegister';
 
 // Dashboard Pages
 import AdminDashboard from './pages/dashboards/AdminDashboard';
@@ -35,6 +36,7 @@ function App() {
           <Route path="/results" element={<Results />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/admin-register" element={<AdminRegister />} />
 
           {/* Protected Dashboard Routes */}
           <Route

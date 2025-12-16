@@ -6,7 +6,7 @@ const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Register
+// Student register (public) - uses enrollment number and creates student user
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, enrollmentNumber, phone, address } = req.body;
@@ -51,6 +51,55 @@ router.post('/register', async (req, res) => {
     }
 
     // Generate token
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET || 'your_jwt_secret_key_change_this_in_production',
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Initial admin registration (public, only allowed if no admin exists yet)
+router.post('/register-admin-initial', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Allow only if no admin exists yet
+    const adminCount = await User.countDocuments({ role: 'admin' });
+    if (adminCount > 0) {
+      return res.status(400).json({ message: 'Admin already exists. Please contact an existing admin.' });
+    }
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User with this email already exists' });
+    }
+
+    const user = new User({
+      name,
+      email,
+      password,
+      role: 'admin'
+    });
+
+    await user.save();
+
     const token = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET || 'your_jwt_secret_key_change_this_in_production',
