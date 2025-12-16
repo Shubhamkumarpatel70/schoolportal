@@ -104,10 +104,10 @@ const TeacherDashboard = () => {
   const fetchData = async () => {
     try {
       const [eventsRes, notificationsRes, classTeacherRes, studentsRes] = await Promise.all([
-        axios.get('${API_BASE_URL}/api/events'),
-        axios.get('${API_BASE_URL}/api/notifications'),
+        axios.get(`${API_BASE_URL}/api/events`),
+        axios.get(`${API_BASE_URL}/api/notifications`),
         axios.get(`${API_BASE_URL}/api/classTeachers/teacher/${user?._id || user?.id}`).catch(() => ({ data: null })),
-        axios.get('${API_BASE_URL}/api/students').catch(() => ({ data: [] }))
+        axios.get(`${API_BASE_URL}/api/students`).catch(() => ({ data: [] }))
       ]);
       const classTeacherData = classTeacherRes.data;
       const studentsData = studentsRes.data || [];
@@ -153,7 +153,7 @@ const TeacherDashboard = () => {
         setEditingStudent(null);
         alert('Student updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/students', studentForm);
+        await axios.post(`${API_BASE_URL}/api/students`, studentForm);
         alert('Student added successfully!');
       }
       setShowStudentForm(false);
@@ -536,7 +536,7 @@ const TeacherDashboard = () => {
                         return;
                       }
 
-                      await axios.post('${API_BASE_URL}/api/examResults', {
+                      await axios.post(`${API_BASE_URL}/api/examResults`, {
                         results,
                         className: classTeacher.className,
                         examType: examResultForm.examType,

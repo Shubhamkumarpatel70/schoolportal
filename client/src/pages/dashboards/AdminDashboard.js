@@ -254,7 +254,7 @@ const AdminDashboard = () => {
         setEditingEvent(null);
         alert('Event updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/events', eventForm);
+        await axios.post(`${API_BASE_URL}/api/events`, eventForm);
         alert('Event created successfully!');
       }
       setShowEventForm(false);
@@ -285,7 +285,7 @@ const AdminDashboard = () => {
         setEditingNotification(null);
         alert('Notification updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/notifications', notificationForm);
+        await axios.post(`${API_BASE_URL}/api/notifications`, notificationForm);
         alert('Notification sent successfully!');
       }
       setShowNotificationForm(false);
@@ -316,7 +316,7 @@ const AdminDashboard = () => {
         setEditingCarousel(null);
         alert('Carousel image updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/carousel', carouselForm);
+        await axios.post(`${API_BASE_URL}/api/carousel`, carouselForm);
         alert('Carousel image uploaded successfully!');
       }
       setShowCarouselForm(false);
@@ -349,7 +349,7 @@ const AdminDashboard = () => {
         setEditingGallery(null);
         alert('Gallery image updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/gallery', galleryForm);
+        await axios.post(`${API_BASE_URL}/api/gallery`, galleryForm);
         alert('Gallery image uploaded successfully!');
       }
       setShowGalleryForm(false);
@@ -382,7 +382,7 @@ const AdminDashboard = () => {
         setEditingStudent(null);
         alert('Student updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/students', studentForm);
+        await axios.post(`${API_BASE_URL}/api/students`, studentForm);
         alert('Student added successfully! Login ID: Mobile Number, Password: Enrollment Number');
       }
       setShowStudentForm(false);
@@ -407,7 +407,7 @@ const AdminDashboard = () => {
         setEditingClassTeacher(null);
         alert('Class teacher updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/classTeachers', classTeacherForm);
+        await axios.post(`${API_BASE_URL}/api/classTeachers`, classTeacherForm);
         alert('Class teacher assigned successfully!');
       }
       setClassTeacherForm({ teacherId: '', className: '', section: '' });
@@ -437,7 +437,7 @@ const AdminDashboard = () => {
         setEditingEnrollment(null);
         alert('Enrollment number updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/enrollmentNumbers', enrollmentForm);
+        await axios.post(`${API_BASE_URL}/api/enrollmentNumbers`, enrollmentForm);
         alert('Enrollment number added successfully!');
       }
       setEnrollmentForm({ enrollmentNumber: '', name: '' });
@@ -503,7 +503,7 @@ const AdminDashboard = () => {
         setEditingClass(null);
         alert('Class updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/classes', classForm);
+        await axios.post(`${API_BASE_URL}/api/classes`, classForm);
         alert('Class created successfully!');
       }
       setShowClassForm(false);
@@ -544,13 +544,13 @@ const AdminDashboard = () => {
         setEditingFee(null);
         alert('Fee updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/fees', feeData);
+        await axios.post(`${API_BASE_URL}/api/fees`, feeData);
         
         // If transport fee is provided and student opted for transport, create transport fee
         if (feeForm.feeCategory === 'regular' && feeForm.transportAmount) {
           const selectedStudent = students.find(s => s._id.toString() === feeForm.selectedStudent);
           if (selectedStudent && selectedStudent.studentType === 'dayScholar' && selectedStudent.transportOpted) {
-            await axios.post('${API_BASE_URL}/api/fees', {
+            await axios.post(`${API_BASE_URL}/api/fees`, {
               studentId: feeForm.selectedStudent,
               amount: feeForm.transportAmount,
               feesType: feeForm.feesType,
@@ -615,7 +615,7 @@ const AdminDashboard = () => {
         setEditingTeacher(null);
         alert('Teacher/Accountant updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/teachers', submitData);
+        await axios.post(`${API_BASE_URL}/api/teachers`, submitData);
         alert('Teacher/Accountant added successfully!');
       }
       setShowTeacherForm(false);
@@ -655,7 +655,7 @@ const AdminDashboard = () => {
         setEditingFine(null);
         alert('Fine updated successfully!');
       } else {
-        await axios.post('${API_BASE_URL}/api/fines', fineForm);
+        await axios.post(`${API_BASE_URL}/api/fines`, fineForm);
         alert('Fine added successfully!');
       }
       setShowFineForm(false);

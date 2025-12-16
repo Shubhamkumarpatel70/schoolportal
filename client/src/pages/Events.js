@@ -15,7 +15,7 @@ const Events = () => {
 
   const fetchEvents = async () => {
     try {
-      const res = await axios.get('${API_BASE_URL}/api/events');
+      const res = await axios.get(`${API_BASE_URL}/api/events`);
       setEvents(res.data);
     } catch (error) {
       console.error('Error fetching events:', error);

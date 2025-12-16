@@ -17,7 +17,7 @@ const Results = () => {
 
   const fetchClasses = async () => {
     try {
-      const res = await axios.get('${API_BASE_URL}/api/classes');
+      const res = await axios.get(`${API_BASE_URL}/api/classes`);
       setClasses(res.data);
     } catch (error) {
       console.error('Error fetching classes:', error);

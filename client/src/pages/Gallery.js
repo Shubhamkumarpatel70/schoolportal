@@ -15,7 +15,7 @@ const Gallery = () => {
 
   const fetchGalleryImages = async () => {
     try {
-      const res = await axios.get('${API_BASE_URL}/api/gallery');
+      const res = await axios.get(`${API_BASE_URL}/api/gallery`);
       setGalleryImages(res.data);
     } catch (error) {
       console.error('Error fetching gallery images:', error);

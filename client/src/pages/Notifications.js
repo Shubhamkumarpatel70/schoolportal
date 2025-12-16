@@ -21,7 +21,7 @@ const Notifications = () => {
 
   const fetchNotifications = async () => {
     try {
-      const res = await axios.get('${API_BASE_URL}/api/notifications');
+      const res = await axios.get(`${API_BASE_URL}/api/notifications`);
       setNotifications(res.data);
     } catch (error) {
       console.error('Error fetching notifications:', error);

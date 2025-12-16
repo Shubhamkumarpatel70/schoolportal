@@ -48,12 +48,12 @@ const AccountantDashboard = () => {
   const fetchData = async () => {
     try {
       const [eventsRes, notificationsRes, classesRes, feesRes, finesRes, studentsRes] = await Promise.all([
-        axios.get('${API_BASE_URL}/api/events'),
-        axios.get('${API_BASE_URL}/api/notifications'),
-        axios.get('${API_BASE_URL}/api/classes'),
-        axios.get('${API_BASE_URL}/api/fees'),
-        axios.get('${API_BASE_URL}/api/fines').catch(() => ({ data: [] })),
-        axios.get('${API_BASE_URL}/api/students')
+        axios.get(`${API_BASE_URL}/api/events`),
+        axios.get(`${API_BASE_URL}/api/notifications`),
+        axios.get(`${API_BASE_URL}/api/classes`),
+        axios.get(`${API_BASE_URL}/api/fees`),
+        axios.get(`${API_BASE_URL}/api/fines`).catch(() => ({ data: [] })),
+        axios.get(`${API_BASE_URL}/api/students`)
       ]);
       setEvents(eventsRes.data.slice(0, 5));
       setNotifications(notificationsRes.data.slice(0, 5));
@@ -100,7 +100,7 @@ const AccountantDashboard = () => {
   const handleSubmitFee = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('${API_BASE_URL}/api/fees', {
+      await axios.post(`${API_BASE_URL}/api/fees`, {
         studentId: feeForm.selectedStudent,
         amount: feeForm.amount,
         feesType: feeForm.feesType,
@@ -115,7 +115,7 @@ const AccountantDashboard = () => {
       if (feeForm.feeCategory === 'regular' && feeForm.transportAmount) {
         const selectedStudent = students.find(s => s._id.toString() === feeForm.selectedStudent);
         if (selectedStudent && selectedStudent.studentType === 'dayScholar' && selectedStudent.transportOpted) {
-          await axios.post('${API_BASE_URL}/api/fees', {
+          await axios.post(`${API_BASE_URL}/api/fees`, {
             studentId: feeForm.selectedStudent,
             amount: feeForm.transportAmount,
             feesType: feeForm.feesType,

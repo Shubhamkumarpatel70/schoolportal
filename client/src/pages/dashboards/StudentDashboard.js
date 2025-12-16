@@ -65,8 +65,8 @@ const StudentDashboard = () => {
         axios.get(`${API_BASE_URL}/api/students/${userId}`),
         axios.get(`${API_BASE_URL}/api/fees/student/${userId}`),
         axios.get(`${API_BASE_URL}/api/fines/student/${userId}`).catch(() => ({ data: [] })),
-        axios.get('${API_BASE_URL}/api/events'),
-        axios.get('${API_BASE_URL}/api/notifications').catch(() => ({ data: [] }))
+        axios.get(`${API_BASE_URL}/api/events`),
+        axios.get(`${API_BASE_URL}/api/notifications`).catch(() => ({ data: [] }))
       ]);
       setStudentData(studentRes.data);
       setFees(feesRes.data);
