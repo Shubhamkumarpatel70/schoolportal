@@ -15,7 +15,8 @@ import {
   FiCalendar,
   FiBell,
   FiPlus,
-  FiTrash2
+  FiTrash2,
+  FiEdit
 } from 'react-icons/fi';
 
 const AccountantDashboard = () => {
@@ -32,6 +33,10 @@ const AccountantDashboard = () => {
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showFeeForm, setShowFeeForm] = useState(false);
+  const [notices, setNotices] = useState([]);
+  const [showNoticeForm, setShowNoticeForm] = useState(false);
+  const [editingNotice, setEditingNotice] = useState(null);
+  const [noticeForm, setNoticeForm] = useState({ title: '', message: '', tag: 'normal' });
   const [feeForm, setFeeForm] = useState({
     selectedClass: '', selectedStudent: '', studentName: '', amount: '', feesType: 'monthly',
     month: '', installmentNumber: '', dueDate: '', remarks: '', feeCategory: 'regular', transportAmount: ''
@@ -47,13 +52,14 @@ const AccountantDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [eventsRes, notificationsRes, classesRes, feesRes, finesRes, studentsRes] = await Promise.all([
+      const [eventsRes, notificationsRes, classesRes, feesRes, finesRes, studentsRes, noticesRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/events`),
         axios.get(`${API_BASE_URL}/api/notifications`),
         axios.get(`${API_BASE_URL}/api/classes`),
         axios.get(`${API_BASE_URL}/api/fees`),
         axios.get(`${API_BASE_URL}/api/fines`).catch(() => ({ data: [] })),
-        axios.get(`${API_BASE_URL}/api/students`)
+        axios.get(`${API_BASE_URL}/api/students`),
+        axios.get(`${API_BASE_URL}/api/notices`)
       ]);
       setEvents(eventsRes.data.slice(0, 5));
       setNotifications(notificationsRes.data.slice(0, 5));
@@ -61,6 +67,7 @@ const AccountantDashboard = () => {
       setFees(feesRes.data);
       setFines(finesRes.data || []);
       setStudents(studentsRes.data || []);
+      setNotices(noticesRes.data);
     } catch (error) {
       console.error('Error fetching data:', error);
     }
@@ -151,6 +158,47 @@ const AccountantDashboard = () => {
       fetchData();
     } catch (error) {
       console.error('Error deleting fee:', error);
+    }
+  };
+
+  const handleSubmitNotice = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingNotice) {
+        await axios.put(`${API_BASE_URL}/api/notices/${editingNotice._id}`, noticeForm);
+        setEditingNotice(null);
+        alert('Notice updated successfully!');
+      } else {
+        await axios.post(`${API_BASE_URL}/api/notices`, noticeForm);
+        alert('Notice added successfully!');
+      }
+      setShowNoticeForm(false);
+      setNoticeForm({ title: '', message: '', tag: 'normal' });
+      fetchData();
+    } catch (error) {
+      console.error('Error creating/updating notice:', error);
+      alert(error.response?.data?.message || 'Error saving notice');
+    }
+  };
+
+  const handleEditNotice = (notice) => {
+    setEditingNotice(notice);
+    setNoticeForm({
+      title: notice.title,
+      message: notice.message,
+      tag: notice.tag || 'normal'
+    });
+    setShowNoticeForm(true);
+  };
+
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/api/notices/${id}`);
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting notice:', error);
+      alert('Error deleting notice');
     }
   };
 
@@ -580,6 +628,127 @@ const AccountantDashboard = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'notices' && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-neutral-3">Notices</h2>
+                <button
+                  onClick={() => {
+                    setShowNoticeForm(!showNoticeForm);
+                    if (!showNoticeForm) {
+                      setEditingNotice(null);
+                      setNoticeForm({ title: '', message: '', tag: 'normal' });
+                    }
+                  }}
+                  className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+                >
+                  <FiBell />
+                  <span>Add Notice</span>
+                </button>
+              </div>
+              {showNoticeForm && (
+                <form onSubmit={handleSubmitNotice} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
+                  <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingNotice ? 'Edit Notice' : 'Add Notice'}</h3>
+                  <input
+                    type="text"
+                    placeholder="Notice Title"
+                    value={noticeForm.title}
+                    onChange={(e) => setNoticeForm({...noticeForm, title: e.target.value})}
+                    required
+                    className="w-full px-4 py-2 border rounded-lg"
+                  />
+                  <textarea
+                    placeholder="Notice Message"
+                    value={noticeForm.message}
+                    onChange={(e) => setNoticeForm({...noticeForm, message: e.target.value})}
+                    required
+                    className="w-full px-4 py-2 border rounded-lg"
+                    rows="4"
+                  />
+                  <div>
+                    <label className="block text-sm text-neutral-3/70 mb-2">Tag</label>
+                    <select
+                      value={noticeForm.tag}
+                      onChange={(e) => setNoticeForm({...noticeForm, tag: e.target.value})}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="new">New</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">
+                      {editingNotice ? 'Update' : 'Add'} Notice
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNoticeForm(false);
+                        setEditingNotice(null);
+                        setNoticeForm({ title: '', message: '', tag: 'normal' });
+                      }}
+                      className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+              <div className="space-y-4">
+                {notices.length === 0 ? (
+                  <p className="text-neutral-3/70 text-center py-8">No notices added yet</p>
+                ) : (
+                  notices.map((notice) => (
+                    <div
+                      key={notice._id}
+                      className={`bg-neutral-2 p-4 rounded-lg border-l-4 ${
+                        notice.tag === 'urgent'
+                          ? 'border-red-500'
+                          : notice.tag === 'new'
+                          ? 'border-green-500'
+                          : 'border-blue-500'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-semibold text-neutral-3 text-lg">{notice.title}</h3>
+                        <div className="flex items-center space-x-2">
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-semibold ${
+                              notice.tag === 'urgent'
+                                ? 'bg-red-100 text-red-800'
+                                : notice.tag === 'new'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {notice.tag === 'urgent' ? 'Urgent' : notice.tag === 'new' ? 'New' : 'Normal'}
+                          </span>
+                          <button
+                            onClick={() => handleEditNotice(notice)}
+                            className="text-secondary hover:text-secondary-600"
+                          >
+                            <FiEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteNotice(notice._id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <FiTrash2 />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-neutral-3/70 mb-2">{notice.message}</p>
+                      <p className="text-xs text-neutral-3/50">
+                        {new Date(notice.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

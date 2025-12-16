@@ -40,6 +40,8 @@ const AdminDashboard = () => {
   const [enrollmentNumbers, setEnrollmentNumbers] = useState([]);
   const [examResults, setExamResults] = useState([]);
   const [selectedClassForExam, setSelectedClassForExam] = useState('');
+  const [notices, setNotices] = useState([]);
+  const [selectedClassForStudents, setSelectedClassForStudents] = useState('');
 
   // Form states
   const [showEventForm, setShowEventForm] = useState(false);
@@ -62,6 +64,8 @@ const AdminDashboard = () => {
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [imageUploadType, setImageUploadType] = useState('link'); // 'link' or 'file'
   const [showTeacherForm, setShowTeacherForm] = useState(false);
+  const [showNoticeForm, setShowNoticeForm] = useState(false);
+  const [editingNotice, setEditingNotice] = useState(null);
   const [feeStudentSearchQuery, setFeeStudentSearchQuery] = useState('');
   const [feeSearchResults, setFeeSearchResults] = useState([]);
   const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
@@ -87,6 +91,7 @@ const AdminDashboard = () => {
   const [fineForm, setFineForm] = useState({
     selectedStudent: '', studentName: '', amount: '', reason: '', dueDate: '', remarks: '', fineType: 'other'
   });
+  const [noticeForm, setNoticeForm] = useState({ title: '', message: '', tag: 'normal' });
   const [showFineForm, setShowFineForm] = useState(false);
   const [editingFine, setEditingFine] = useState(null);
   const [teacherForm, setTeacherForm] = useState({
@@ -184,7 +189,7 @@ const AdminDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [usersRes, eventsRes, notificationsRes, contactsRes, carouselRes, galleryRes, studentsRes, classesRes, feesRes, finesRes, classTeachersRes, enrollmentNumbersRes, teachersRes] = await Promise.all([
+      const [usersRes, eventsRes, notificationsRes, contactsRes, carouselRes, galleryRes, studentsRes, classesRes, feesRes, finesRes, classTeachersRes, enrollmentNumbersRes, teachersRes, noticesRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/users`),
         axios.get(`${API_BASE_URL}/api/events`),
         axios.get(`${API_BASE_URL}/api/notifications`),
@@ -197,7 +202,8 @@ const AdminDashboard = () => {
         axios.get(`${API_BASE_URL}/api/fines`),
         axios.get(`${API_BASE_URL}/api/classTeachers`),
         axios.get(`${API_BASE_URL}/api/enrollmentNumbers`),
-        axios.get(`${API_BASE_URL}/api/teachers`)
+        axios.get(`${API_BASE_URL}/api/teachers`),
+        axios.get(`${API_BASE_URL}/api/notices`)
       ]);
       
       setUsers(usersRes.data);
@@ -213,6 +219,7 @@ const AdminDashboard = () => {
       setClassTeachers(classTeachersRes.data);
       setEnrollmentNumbers(enrollmentNumbersRes.data);
       setTeachers(teachersRes.data);
+      setNotices(noticesRes.data);
       
       setStats({
         users: usersRes.data.length,
@@ -684,6 +691,36 @@ const AdminDashboard = () => {
     setShowFineForm(true);
   };
 
+  const handleSubmitNotice = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingNotice) {
+        await axios.put(`${API_BASE_URL}/api/notices/${editingNotice._id}`, noticeForm);
+        setEditingNotice(null);
+        alert('Notice updated successfully!');
+      } else {
+        await axios.post(`${API_BASE_URL}/api/notices`, noticeForm);
+        alert('Notice added successfully!');
+      }
+      setShowNoticeForm(false);
+      setNoticeForm({ title: '', message: '', tag: 'normal' });
+      fetchDashboardData();
+    } catch (error) {
+      console.error('Error creating/updating notice:', error);
+      alert(error.response?.data?.message || 'Error saving notice');
+    }
+  };
+
+  const handleEditNotice = (notice) => {
+    setEditingNotice(notice);
+    setNoticeForm({
+      title: notice.title,
+      message: notice.message,
+      tag: notice.tag || 'normal'
+    });
+    setShowNoticeForm(true);
+  };
+
   const handleImageUpload = (e, formType) => {
     const file = e.target.files[0];
     if (file) {
@@ -715,7 +752,8 @@ const AdminDashboard = () => {
         fine: `/api/fines/${id}`,
         classTeacher: `/api/classTeachers/${id}`,
         enrollmentNumber: `/api/enrollmentNumbers/${id}`,
-        teacher: `/api/teachers/${id}`
+        teacher: `/api/teachers/${id}`,
+        notice: `/api/notices/${id}`
       };
       await axios.delete(`${API_BASE_URL}${endpoints[type]}`);
       fetchDashboardData();
@@ -1980,6 +2018,22 @@ const AdminDashboard = () => {
                 </div>
               </form>
             )}
+            {/* Class Filter */}
+            <div className="mb-4">
+              <label className="block text-sm text-neutral-3/70 mb-2">Filter by Class</label>
+              <select
+                value={selectedClassForStudents}
+                onChange={(e) => setSelectedClassForStudents(e.target.value)}
+                className="px-4 py-2 border rounded-lg w-full md:w-64"
+              >
+                <option value="">All Classes</option>
+                {classes.map((cls) => (
+                  <option key={cls._id} value={cls.className}>
+                    {cls.className} {cls.section ? `- ${cls.section}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="bg-neutral-2 rounded-lg shadow-md overflow-hidden">
               <table className="w-full">
                 <thead className="bg-primary text-white">
@@ -1992,7 +2046,9 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {students.map((s) => (
+                  {students
+                    .filter((s) => !selectedClassForStudents || s.class === selectedClassForStudents)
+                    .map((s) => (
                     <tr key={s._id} className="border-b border-neutral-1">
                       <td className="px-4 py-3 text-neutral-3">{s.studentName}</td>
                       <td className="px-4 py-3 text-neutral-3">{s.class}</td>
@@ -2143,6 +2199,128 @@ const AdminDashboard = () => {
           </div>
         );
 
+      case 'notices':
+        return (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-neutral-3">Notices</h2>
+              <button
+                onClick={() => {
+                  setShowNoticeForm(!showNoticeForm);
+                  if (!showNoticeForm) {
+                    setEditingNotice(null);
+                    setNoticeForm({ title: '', message: '', tag: 'normal' });
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
+                <FiBell />
+                <span>Add Notice</span>
+              </button>
+            </div>
+            {showNoticeForm && (
+              <form onSubmit={handleSubmitNotice} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingNotice ? 'Edit Notice' : 'Add Notice'}</h3>
+                <input
+                  type="text"
+                  placeholder="Notice Title"
+                  value={noticeForm.title}
+                  onChange={(e) => setNoticeForm({...noticeForm, title: e.target.value})}
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <textarea
+                  placeholder="Notice Message"
+                  value={noticeForm.message}
+                  onChange={(e) => setNoticeForm({...noticeForm, message: e.target.value})}
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                  rows="4"
+                />
+                <div>
+                  <label className="block text-sm text-neutral-3/70 mb-2">Tag</label>
+                  <select
+                    value={noticeForm.tag}
+                    onChange={(e) => setNoticeForm({...noticeForm, tag: e.target.value})}
+                    className="w-full px-4 py-2 border rounded-lg"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="new">New</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div className="flex space-x-2">
+                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">
+                    {editingNotice ? 'Update' : 'Add'} Notice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNoticeForm(false);
+                      setEditingNotice(null);
+                      setNoticeForm({ title: '', message: '', tag: 'normal' });
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+            <div className="space-y-4">
+              {notices.length === 0 ? (
+                <p className="text-neutral-3/70 text-center py-8">No notices added yet</p>
+              ) : (
+                notices.map((notice) => (
+                  <div
+                    key={notice._id}
+                    className={`bg-neutral-2 p-4 rounded-lg border-l-4 ${
+                      notice.tag === 'urgent'
+                        ? 'border-red-500'
+                        : notice.tag === 'new'
+                        ? 'border-green-500'
+                        : 'border-blue-500'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-semibold text-neutral-3 text-lg">{notice.title}</h3>
+                      <div className="flex items-center space-x-2">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            notice.tag === 'urgent'
+                              ? 'bg-red-100 text-red-800'
+                              : notice.tag === 'new'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {notice.tag === 'urgent' ? 'Urgent' : notice.tag === 'new' ? 'New' : 'Normal'}
+                        </span>
+                        <button
+                          onClick={() => handleEditNotice(notice)}
+                          className="text-secondary hover:text-secondary-600"
+                        >
+                          <FiEdit />
+                        </button>
+                        <button
+                          onClick={() => handleDelete('notice', notice._id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <FiTrash2 />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-neutral-3/70 mb-2">{notice.message}</p>
+                    <p className="text-xs text-neutral-3/50">
+                      {new Date(notice.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
@@ -2163,7 +2341,8 @@ const AdminDashboard = () => {
     { id: 'students', label: 'Students', icon: FiUserPlus },
     { id: 'fees', label: 'Fees', icon: FiDollarSign },
     { id: 'fines', label: 'Fines', icon: FiDollarSign },
-    { id: 'examResults', label: 'Exam Results', icon: FiAward }
+    { id: 'examResults', label: 'Exam Results', icon: FiAward },
+    { id: 'notices', label: 'Notices', icon: FiBell }
   ];
 
   return (

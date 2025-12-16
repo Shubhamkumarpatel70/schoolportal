@@ -4,18 +4,20 @@ import Footer from '../components/Footer';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/api';
-import { FiBook, FiUsers, FiAward, FiTrendingUp, FiChevronLeft, FiChevronRight, FiCalendar, FiBell } from 'react-icons/fi';
+import { FiBook, FiUsers, FiAward, FiTrendingUp, FiChevronLeft, FiChevronRight, FiCalendar, FiBell, FiAlertCircle } from 'react-icons/fi';
 
 const Home = () => {
   const [carouselImages, setCarouselImages] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [events, setEvents] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [notices, setNotices] = useState([]);
 
   useEffect(() => {
     fetchCarousel();
     fetchEvents();
     fetchNotifications();
+    fetchNotices();
   }, []);
 
   useEffect(() => {
@@ -53,6 +55,16 @@ const Home = () => {
     } catch (error) {
       console.error('Error fetching notifications:', error);
       setNotifications([]);
+    }
+  };
+
+  const fetchNotices = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/notices`);
+      setNotices(res.data.slice(0, 5)); // Show latest 5 notices
+    } catch (error) {
+      console.error('Error fetching notices:', error);
+      setNotices([]);
     }
   };
 
@@ -187,6 +199,80 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      {/* Notices Section - Upcoming Notice News */}
+      {notices.length > 0 && (
+        <section className="py-16 bg-gradient-to-b from-neutral-1 to-neutral-2">
+          <div className="container mx-auto px-4">
+            <div className="max-w-6xl mx-auto">
+              <h2 className="text-3xl md:text-4xl font-bold text-center mb-8 text-neutral-3 flex items-center justify-center space-x-3">
+                <FiAlertCircle className="text-secondary text-4xl" />
+                <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                  Upcoming Notice News
+                </span>
+              </h2>
+              
+              <div className="bg-neutral-2 rounded-xl shadow-2xl p-6 md:p-8 border-2 border-primary/20">
+                <div className="space-y-4">
+                  {notices.map((notice, index) => (
+                    <div
+                      key={notice._id}
+                      className={`bg-white rounded-lg shadow-md border-l-4 p-5 md:p-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 ${
+                        notice.tag === 'urgent'
+                          ? 'border-red-500 bg-red-50/50'
+                          : notice.tag === 'new'
+                          ? 'border-green-500 bg-green-50/50'
+                          : 'border-blue-500 bg-blue-50/50'
+                      }`}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-bold text-neutral-3 text-lg md:text-xl">
+                              {notice.title}
+                            </h3>
+                            {notice.tag === 'urgent' && (
+                              <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded animate-pulse">
+                                URGENT
+                              </span>
+                            )}
+                            {notice.tag === 'new' && (
+                              <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">
+                                NEW
+                              </span>
+                            )}
+                          </div>
+                          <div className="bg-neutral-1/50 rounded-md p-4 mt-3">
+                            <p className="text-neutral-3/90 text-sm md:text-base leading-relaxed whitespace-pre-line">
+                              {notice.message}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 border-t-2 border-neutral-1/30">
+                        <div className="flex items-center gap-2 text-sm text-neutral-3/70">
+                          <FiCalendar className="text-secondary" />
+                          <span className="font-medium">
+                            {new Date(notice.createdAt).toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric',
+                              weekday: 'short'
+                            })}
+                          </span>
+                        </div>
+                        <div className="text-xs text-neutral-3/50">
+                          {notice.createdBy?.name && `Posted by: ${notice.createdBy.name}`}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Events and Notifications Section */}
       <section className="py-16 bg-neutral-2">

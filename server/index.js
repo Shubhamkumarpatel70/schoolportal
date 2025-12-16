@@ -36,6 +36,7 @@ app.use('/api/enrollmentNumbers', require('./routes/enrollmentNumbers'));
 app.use('/api/teachers', require('./routes/teachers'));
 app.use('/api/fines', require('./routes/fines'));
 app.use('/api/examResults', require('./routes/examResults'));
+app.use('/api/notices', require('./routes/notices'));
 
 // Serve React client in production
 if (process.env.NODE_ENV === 'production') {
