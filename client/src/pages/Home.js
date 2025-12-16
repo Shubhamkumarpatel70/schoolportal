@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/api';
-import { FiBook, FiUsers, FiAward, FiTrendingUp, FiChevronLeft, FiChevronRight, FiCalendar, FiBell, FiAlertCircle } from 'react-icons/fi';
+import { FiBook, FiUsers, FiAward, FiTrendingUp, FiChevronLeft, FiChevronRight, FiCalendar, FiBell, FiAlertCircle, FiLayout } from 'react-icons/fi';
 
 const Home = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [carouselImages, setCarouselImages] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [events, setEvents] = useState([]);
@@ -343,14 +346,30 @@ const Home = () => {
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
           <p className="text-xl mb-8 text-white/90">
-            Join our community and experience the future of education
+            {user 
+              ? `Welcome back, ${user.name}! Access your dashboard to continue.`
+              : 'Join our community and experience the future of education'
+            }
           </p>
-          <Link
-            to="/register"
-            className="bg-accent text-primary px-8 py-3 rounded-lg font-semibold hover:bg-accent-600 transition shadow-lg inline-block"
-          >
-            Register Now
-          </Link>
+          {user ? (
+            <button
+              onClick={() => {
+                const role = user.role || 'student';
+                navigate(`/${role}/dashboard`);
+              }}
+              className="bg-accent text-primary px-8 py-3 rounded-lg font-semibold hover:bg-accent-600 transition shadow-lg inline-flex items-center space-x-2"
+            >
+              <FiLayout />
+              <span>Go to Dashboard</span>
+            </button>
+          ) : (
+            <Link
+              to="/register"
+              className="bg-accent text-primary px-8 py-3 rounded-lg font-semibold hover:bg-accent-600 transition shadow-lg inline-block"
+            >
+              Register Now
+            </Link>
+          )}
         </div>
       </section>
 

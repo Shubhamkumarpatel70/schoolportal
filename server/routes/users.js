@@ -46,6 +46,43 @@ router.put('/:id/role', auth, async (req, res) => {
   }
 });
 
+// Update user (Admin only)
+router.put('/:id', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    const { name, email, phone, address, role } = req.body;
+    
+    // Check if email is already used by another user
+    if (email) {
+      const emailUser = await User.findOne({ email });
+      if (emailUser && emailUser._id.toString() !== req.params.id) {
+        return res.status(400).json({ message: 'Email already registered to another user' });
+      }
+    }
+    
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Update user fields
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (phone !== undefined) user.phone = phone;
+    if (address !== undefined) user.address = address;
+    if (role) user.role = role;
+    
+    await user.save();
+    
+    res.json(user.select('-password'));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Change password
 router.put('/:id/password', auth, async (req, res) => {
   try {

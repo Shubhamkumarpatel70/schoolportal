@@ -1,12 +1,13 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Student = require('../models/Student');
 const EnrollmentNumber = require('../models/EnrollmentNumber');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Student register (public) - uses enrollment number and creates student user
+// Student register (public) - uses enrollment number and creates/updates student user
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, enrollmentNumber, phone, address } = req.body;
@@ -18,36 +19,79 @@ router.post('/register', async (req, res) => {
       if (!enrollment) {
         return res.status(400).json({ message: 'Invalid enrollment number' });
       }
-      if (enrollment.isUsed) {
+    }
+
+    // Check if a student already exists with this enrollment number (created by admin/teacher)
+    const existingStudent = await Student.findOne({ enrollmentNumber });
+    let user = null;
+
+    if (existingStudent) {
+      // Student record exists - update the existing user
+      user = await User.findById(existingStudent.userId);
+      
+      if (!user) {
+        return res.status(400).json({ message: 'Student record exists but user account not found. Please contact administrator.' });
+      }
+
+      // Check if email is already used by another user
+      const emailUser = await User.findOne({ email });
+      if (emailUser && emailUser._id.toString() !== user._id.toString()) {
+        return res.status(400).json({ message: 'Email already registered to another account' });
+      }
+
+      // Update existing user with registration details
+      user.name = name || user.name;
+      user.email = email || user.email;
+      user.phone = phone || user.phone;
+      user.address = address || user.address;
+      
+      // Only update password if provided and different from default
+      if (password && password !== enrollmentNumber) {
+        user.password = password;
+        user.isDefaultPassword = false;
+      }
+      
+      await user.save();
+
+      // Update enrollment number record
+      if (enrollment) {
+        enrollment.isUsed = true;
+        enrollment.name = name;
+        enrollment.usedBy = user._id;
+        await enrollment.save();
+      }
+    } else {
+      // No existing student - check if enrollment is already used
+      if (enrollment && enrollment.isUsed) {
         return res.status(400).json({ message: 'Enrollment number already used' });
       }
-    }
 
-    // Check if user exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
-    }
+      // Check if user exists with this email
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ message: 'User already exists with this email' });
+      }
 
-    // Create user
-    const user = new User({
-      name,
-      email,
-      password,
-      role: 'student', // Default to student
-      studentId: enrollmentNumber,
-      phone,
-      address
-    });
+      // Create new user
+      user = new User({
+        name,
+        email,
+        password,
+        role: 'student',
+        studentId: enrollmentNumber,
+        phone,
+        address
+      });
 
-    await user.save();
+      await user.save();
 
-    // Link enrollment number to user
-    if (enrollment && enrollmentNumber) {
-      enrollment.isUsed = true;
-      enrollment.name = name; // Update name if provided
-      enrollment.usedBy = user._id;
-      await enrollment.save();
+      // Link enrollment number to user
+      if (enrollment && enrollmentNumber) {
+        enrollment.isUsed = true;
+        enrollment.name = name;
+        enrollment.usedBy = user._id;
+        await enrollment.save();
+      }
     }
 
     // Generate token

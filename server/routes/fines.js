@@ -5,10 +5,10 @@ const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all fines (Admin only)
+// Get all fines (Admin or Accountant only)
 router.get('/', auth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== 'admin' && req.user.role !== 'accountant') {
       return res.status(403).json({ message: 'Access denied' });
     }
     const fines = await Fine.find().populate('studentId', 'studentName class rollNumber').sort({ createdAt: -1 });
