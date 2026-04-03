@@ -1,18 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import Header from '../../components/Header';
-import Footer from '../../components/Footer';
-import axios from 'axios';
-import { API_BASE_URL } from '../../utils/api';
+import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import Header from "../../components/Header";
+import Footer from "../../components/Footer";
+import axios from "axios";
+import { API_BASE_URL } from "../../utils/api";
+import { formatDateDDMMYYYY } from "../../utils/date";
+import { getMonthAttendanceSummaryFromRecords } from "../../utils/attendanceStats";
 import {
-  FiBook, FiCalendar, FiBell, FiFileText, FiAward, FiClock, FiUser, FiDollarSign, FiUsers
-} from 'react-icons/fi';
+  FiCalendar,
+  FiBell,
+  FiClock,
+  FiUser,
+  FiDollarSign,
+  FiUsers,
+  FiCheckCircle,
+} from "react-icons/fi";
+import StudentAttendance from "./StudentAttendance";
 
 const StudentDashboard = () => {
   const { user, changePassword, fetchUser } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState("profile");
   const [studentData, setStudentData] = useState(null);
   const [fees, setFees] = useState([]);
   const [fines, setFines] = useState([]);
@@ -21,15 +30,16 @@ const StudentDashboard = () => {
   const [classTeacher, setClassTeacher] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
-    enrollmentNumber: '',
-    name: '',
-    newPassword: '',
-    confirmPassword: ''
+    enrollmentNumber: "",
+    name: "",
+    newPassword: "",
+    confirmPassword: "",
   });
+  const [monthAttendanceOverview, setMonthAttendanceOverview] = useState(null);
 
   useEffect(() => {
-    if (user?.role !== 'student') {
-      navigate('/');
+    if (user?.role !== "student") {
+      navigate("/");
       return;
     }
     fetchData();
@@ -40,10 +50,10 @@ const StudentDashboard = () => {
     if (user?.isDefaultPassword && studentData) {
       setShowChangePassword(true);
       setPasswordForm({
-        enrollmentNumber: studentData.enrollmentNumber || user?.studentId || '',
-        name: studentData.studentName || user?.name || '',
-        newPassword: '',
-        confirmPassword: ''
+        enrollmentNumber: studentData.enrollmentNumber || user?.studentId || "",
+        name: studentData.studentName || user?.name || "",
+        newPassword: "",
+        confirmPassword: "",
       });
     }
   }, [user, studentData]);
@@ -54,36 +64,79 @@ const StudentDashboard = () => {
     }
   }, [studentData]);
 
+  useEffect(() => {
+    if (!studentData?._id) {
+      setMonthAttendanceOverview(null);
+      return;
+    }
+    const month = new Date().getMonth() + 1;
+    const year = new Date().getFullYear();
+    let cancelled = false;
+    setMonthAttendanceOverview({ loading: true, summary: null });
+    (async () => {
+      try {
+        const [attRes, holRes] = await Promise.all([
+          axios.get(
+            `${API_BASE_URL}/api/attendance/student/${studentData._id}?month=${month}&year=${year}`,
+          ),
+          axios.get(`${API_BASE_URL}/api/holidays?month=${month}&year=${year}`),
+        ]);
+        if (cancelled) return;
+        const summary = getMonthAttendanceSummaryFromRecords(
+          year,
+          month,
+          attRes.data || [],
+          holRes.data || [],
+        );
+        setMonthAttendanceOverview({ loading: false, summary });
+      } catch (e) {
+        if (!cancelled) {
+          setMonthAttendanceOverview({ loading: false, summary: null });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [studentData]);
+
   const fetchData = async () => {
     try {
       const userId = user?._id || user?.id;
       if (!userId) {
-        console.error('User ID not found');
+        console.error("User ID not found");
         return;
       }
-      const [studentRes, feesRes, finesRes, eventsRes, notificationsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/api/students/${userId}`),
-        axios.get(`${API_BASE_URL}/api/fees/student/${userId}`),
-        axios.get(`${API_BASE_URL}/api/fines/student/${userId}`).catch(() => ({ data: [] })),
-        axios.get(`${API_BASE_URL}/api/events`),
-        axios.get(`${API_BASE_URL}/api/notifications`).catch(() => ({ data: [] }))
-      ]);
+      const [studentRes, feesRes, finesRes, eventsRes, notificationsRes] =
+        await Promise.all([
+          axios.get(`${API_BASE_URL}/api/students/${userId}`),
+          axios.get(`${API_BASE_URL}/api/fees/student/${userId}`),
+          axios
+            .get(`${API_BASE_URL}/api/fines/student/${userId}`)
+            .catch(() => ({ data: [] })),
+          axios.get(`${API_BASE_URL}/api/events`),
+          axios
+            .get(`${API_BASE_URL}/api/notifications`)
+            .catch(() => ({ data: [] })),
+        ]);
       setStudentData(studentRes.data);
       setFees(feesRes.data);
       setFines(finesRes.data || []);
       setEvents(eventsRes.data.slice(0, 10));
       setNotifications(notificationsRes.data?.slice(0, 10) || []);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error("Error fetching data:", error);
     }
   };
 
   const fetchClassTeacher = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/classTeachers/class/${studentData.class}`);
+      const res = await axios.get(
+        `${API_BASE_URL}/api/classTeachers/class/${studentData.class}`,
+      );
       setClassTeacher(res.data);
     } catch (error) {
-      console.error('Error fetching class teacher:', error);
+      console.error("Error fetching class teacher:", error);
       setClassTeacher(null);
     }
   };
@@ -92,64 +145,121 @@ const StudentDashboard = () => {
     try {
       await axios.put(`${API_BASE_URL}/api/fees/${feeId}/pay`, paymentData);
       fetchData();
-      alert('Fee payment submitted successfully!');
+      alert("Fee payment submitted successfully!");
     } catch (error) {
-      console.error('Error paying fee:', error);
-      alert('Error submitting payment');
+      console.error("Error paying fee:", error);
+      alert("Error submitting payment");
     }
   };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert('New password and confirm password do not match');
+      alert("New password and confirm password do not match");
       return;
     }
     if (passwordForm.newPassword.length < 6) {
-      alert('Password must be at least 6 characters long');
+      alert("Password must be at least 6 characters long");
       return;
     }
-    
+
     try {
       // For default password, pass null as currentPassword (backend will skip validation)
-      const currentPassword = user?.isDefaultPassword ? null : passwordForm.enrollmentNumber;
+      const currentPassword = user?.isDefaultPassword
+        ? null
+        : passwordForm.enrollmentNumber;
       const userId = user?._id || user?.id;
-      const result = await changePassword(userId, currentPassword, passwordForm.newPassword);
+      const result = await changePassword(
+        userId,
+        currentPassword,
+        passwordForm.newPassword,
+      );
       if (result.success) {
-        alert('Password changed successfully! Please login again with your new password.');
+        alert(
+          "Password changed successfully! Please login again with your new password.",
+        );
         setShowChangePassword(false);
         setPasswordForm({
-          enrollmentNumber: '',
-          name: '',
-          newPassword: '',
-          confirmPassword: ''
+          enrollmentNumber: "",
+          name: "",
+          newPassword: "",
+          confirmPassword: "",
         });
         // Refresh user data
         await fetchUser();
       } else {
-        alert(result.message || 'Failed to change password');
+        alert(result.message || "Failed to change password");
       }
     } catch (error) {
-      console.error('Error changing password:', error);
-      alert('Error changing password');
+      console.error("Error changing password:", error);
+      alert("Error changing password");
     }
   };
 
   const tabs = [
-    { id: 'profile', label: 'Profile', icon: FiUser },
-    { id: 'fee', label: 'Fee Submission', icon: FiDollarSign },
-    { id: 'classTeacher', label: 'Class Teacher', icon: FiUsers },
-    { id: 'notifications', label: 'Notifications', icon: FiBell },
-    { id: 'events', label: 'Events', icon: FiCalendar }
+    { id: "profile", label: "Profile", icon: FiUser },
+    { id: "fee", label: "Fee Submission", icon: FiDollarSign },
+    { id: "classTeacher", label: "Class Teacher", icon: FiUsers },
+    { id: "notifications", label: "Notifications", icon: FiBell },
+    { id: "events", label: "Events", icon: FiCalendar },
+    { id: "attendance", label: "Attendance", icon: FiCalendar },
   ];
+
+  const dashboardStats = useMemo(() => {
+    let attendanceValue = "—";
+    let attendanceHint =
+      "Working days = Present + Absent (excluding holidays)";
+
+    if (studentData?._id) {
+      if (!monthAttendanceOverview || monthAttendanceOverview.loading) {
+        attendanceValue = "…";
+      } else {
+        const s = monthAttendanceOverview.summary;
+        if (s && s.workingDays > 0 && s.percent != null) {
+          attendanceValue = `${s.percent}%`;
+          attendanceHint = `Present ${s.present} · Absent ${s.absent} · Working days ${s.workingDays}`;
+        }
+      }
+    } else {
+      attendanceHint = "";
+    }
+
+    return [
+      { label: "Total Fees", value: fees.length, icon: FiDollarSign },
+      {
+        label: "Pending Fees",
+        value: fees.filter((fee) => fee.status === "pending").length,
+        icon: FiDollarSign,
+      },
+      {
+        label: "Attendance (this month)",
+        value: attendanceValue,
+        icon: FiCheckCircle,
+        hint: attendanceHint,
+      },
+      { label: "Notifications", value: notifications.length, icon: FiBell },
+      { label: "Upcoming Events", value: events.length, icon: FiCalendar },
+    ];
+  }, [fees, notifications, events, monthAttendanceOverview, studentData?._id]);
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'profile':
+      case "attendance":
         return (
           <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">My Profile</h2>
-            
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              My Attendance
+            </h2>
+            <StudentAttendance user={user} />
+          </div>
+        );
+      case "profile":
+        return (
+          <div>
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              My Profile
+            </h2>
+
             {/* Change Password Modal/Form - Show if default password */}
             {showChangePassword && user?.isDefaultPassword && (
               <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-lg">
@@ -162,12 +272,15 @@ const StudentDashboard = () => {
                       Change Your Default Password
                     </h3>
                     <p className="text-sm text-yellow-700 mb-4">
-                      You are using the default password. Please change it to secure your account.
+                      You are using the default password. Please change it to
+                      secure your account.
                     </p>
                     <form onSubmit={handleChangePassword} className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-yellow-800 mb-1">Enrollment Number</label>
+                          <label className="block text-sm font-medium text-yellow-800 mb-1">
+                            Enrollment Number
+                          </label>
                           <input
                             type="text"
                             value={passwordForm.enrollmentNumber}
@@ -176,7 +289,9 @@ const StudentDashboard = () => {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-yellow-800 mb-1">Name</label>
+                          <label className="block text-sm font-medium text-yellow-800 mb-1">
+                            Name
+                          </label>
                           <input
                             type="text"
                             value={passwordForm.name}
@@ -185,11 +300,18 @@ const StudentDashboard = () => {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-yellow-800 mb-1">New Password <span className="text-red-500">*</span></label>
+                          <label className="block text-sm font-medium text-yellow-800 mb-1">
+                            New Password <span className="text-red-500">*</span>
+                          </label>
                           <input
                             type="password"
                             value={passwordForm.newPassword}
-                            onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                            onChange={(e) =>
+                              setPasswordForm({
+                                ...passwordForm,
+                                newPassword: e.target.value,
+                              })
+                            }
                             required
                             minLength={6}
                             className="w-full px-4 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
@@ -197,11 +319,19 @@ const StudentDashboard = () => {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-yellow-800 mb-1">Re-enter New Password <span className="text-red-500">*</span></label>
+                          <label className="block text-sm font-medium text-yellow-800 mb-1">
+                            Re-enter New Password{" "}
+                            <span className="text-red-500">*</span>
+                          </label>
                           <input
                             type="password"
                             value={passwordForm.confirmPassword}
-                            onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                            onChange={(e) =>
+                              setPasswordForm({
+                                ...passwordForm,
+                                confirmPassword: e.target.value,
+                              })
+                            }
                             required
                             minLength={6}
                             className="w-full px-4 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
@@ -222,63 +352,102 @@ const StudentDashboard = () => {
                 </div>
               </div>
             )}
-            
+
             {studentData ? (
               <div className="bg-neutral-2 rounded-lg shadow-md p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Student Name</label>
-                    <p className="text-neutral-3 font-semibold">{studentData.studentName}</p>
+                    <label className="text-neutral-3/70 text-sm">
+                      Student Name
+                    </label>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.studentName}
+                    </p>
                   </div>
                   <div>
                     <label className="text-neutral-3/70 text-sm">Class</label>
-                    <p className="text-neutral-3 font-semibold">{studentData.class}</p>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.class}
+                    </p>
                   </div>
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Roll Number</label>
-                    <p className="text-neutral-3 font-semibold">{studentData.rollNumber}</p>
+                    <label className="text-neutral-3/70 text-sm">
+                      Roll Number
+                    </label>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.rollNumber}
+                    </p>
                   </div>
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Enrollment Number</label>
-                    <p className="text-neutral-3 font-semibold">{studentData.enrollmentNumber}</p>
+                    <label className="text-neutral-3/70 text-sm">
+                      Enrollment Number
+                    </label>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.enrollmentNumber}
+                    </p>
                   </div>
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Father's Name</label>
-                    <p className="text-neutral-3 font-semibold">{studentData.fathersName}</p>
+                    <label className="text-neutral-3/70 text-sm">
+                      Father's Name
+                    </label>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.fathersName}
+                    </p>
                   </div>
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Mother's Name</label>
-                    <p className="text-neutral-3 font-semibold">{studentData.mothersName}</p>
+                    <label className="text-neutral-3/70 text-sm">
+                      Mother's Name
+                    </label>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.mothersName}
+                    </p>
                   </div>
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Mobile Number</label>
-                    <p className="text-neutral-3 font-semibold">{studentData.mobileNumber}</p>
+                    <label className="text-neutral-3/70 text-sm">
+                      Mobile Number
+                    </label>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.mobileNumber}
+                    </p>
                   </div>
                   <div>
                     <label className="text-neutral-3/70 text-sm">Email</label>
                     <p className="text-neutral-3 font-semibold">
-                      {user?.email && !user.email.includes('@school.com') ? user.email : 'Not Set'}
+                      {user?.email && !user.email.includes("@school.com")
+                        ? user.email
+                        : "Not Set"}
                     </p>
                   </div>
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Student Type</label>
+                    <label className="text-neutral-3/70 text-sm">
+                      Student Type
+                    </label>
                     <p className="text-neutral-3 font-semibold capitalize">
-                      {studentData.studentType === 'dayScholar' ? 'Day Scholar' : 'Hosteler'}
-                      {studentData.studentType === 'dayScholar' && studentData.busRoute && ` (${studentData.busRoute})`}
+                      {studentData.studentType === "dayScholar"
+                        ? "Day Scholar"
+                        : "Hosteler"}
+                      {studentData.studentType === "dayScholar" &&
+                        studentData.busRoute &&
+                        ` (${studentData.busRoute})`}
                     </p>
                   </div>
                   {classTeacher && (
                     <div className="md:col-span-2">
-                      <label className="text-neutral-3/70 text-sm">Class Teacher</label>
+                      <label className="text-neutral-3/70 text-sm">
+                        Class Teacher
+                      </label>
                       <p className="text-neutral-3 font-semibold">
-                        {classTeacher.teacherId?.name || 'N/A'}
-                        {classTeacher.teacherId?.email && ` (${classTeacher.teacherId.email})`}
+                        {classTeacher.teacherId?.name || "N/A"}
+                        {classTeacher.teacherId?.email &&
+                          ` (${classTeacher.teacherId.email})`}
                       </p>
                     </div>
                   )}
                   <div className="md:col-span-2">
                     <label className="text-neutral-3/70 text-sm">Address</label>
-                    <p className="text-neutral-3 font-semibold">{studentData.address}</p>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.address}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -290,10 +459,12 @@ const StudentDashboard = () => {
           </div>
         );
 
-      case 'fee':
+      case "fee":
         return (
           <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">Fee Submission</h2>
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              Fee Submission
+            </h2>
             <div className="space-y-4">
               {fees.length === 0 ? (
                 <div className="bg-neutral-2 rounded-lg shadow-md p-6 text-center">
@@ -301,137 +472,263 @@ const StudentDashboard = () => {
                 </div>
               ) : (
                 <>
-                  {fees.filter(f => f.feeCategory !== 'transport').map((fee) => (
-                    <div key={fee._id} className="bg-neutral-2 rounded-lg shadow-md p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-lg font-semibold text-neutral-3">Fee Payment - {fee.feesType || 'monthly'}</h3>
-                          <p className="text-sm text-neutral-3/70">Amount: ₹{fee.amount}</p>
-                          <p className="text-sm text-neutral-3/70">Due Date: {new Date(fee.dueDate).toLocaleDateString()}</p>
-                          {fee.month && <p className="text-sm text-neutral-3/70">Month: {fee.month}</p>}
-                          {fee.installmentNumber && <p className="text-sm text-neutral-3/70">Installment: {fee.installmentNumber}</p>}
-                          {fee.remarks && <p className="text-sm text-neutral-3/70 mt-1">Remarks: {fee.remarks}</p>}
-                        </div>
-                        <span className={`px-3 py-1 rounded text-sm ${
-                          fee.status === 'paid' ? 'bg-green-100 text-green-800' :
-                          fee.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {fee.status.toUpperCase()}
-                        </span>
-                      </div>
-                      {fee.status === 'paid' && (
-                        <div className="mt-4 p-3 bg-green-50 rounded">
-                          <p className="text-sm text-green-700">Paid on: {new Date(fee.paidDate).toLocaleDateString()}</p>
-                          {fee.paymentMethod && <p className="text-sm text-green-700">Payment Method: {fee.paymentMethod}</p>}
-                          {fee.transactionId && <p className="text-sm text-green-700">Transaction ID: {fee.transactionId}</p>}
-                        </div>
-                      )}
-                      {fee.status === 'pending' && (
-                        <button
-                          onClick={() => {
-                            const paymentMethod = prompt('Enter payment method (e.g., Online, Cash, Cheque):');
-                            const transactionId = prompt('Enter transaction ID (if applicable):');
-                            if (paymentMethod) {
-                              handlePayFee(fee._id, { paymentMethod, transactionId: transactionId || '' });
-                            }
-                          }}
-                          className="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
-                        >
-                          Pay Now
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {fees.filter(f => f.feeCategory === 'transport').length > 0 && (
-                    <div className="mt-6">
-                      <h3 className="text-xl font-semibold text-neutral-3 mb-4">Transport Fees</h3>
-                      {fees.filter(f => f.feeCategory === 'transport').map((fee) => (
-                        <div key={fee._id} className="bg-neutral-2 rounded-lg shadow-md p-6 mb-4">
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <h3 className="text-lg font-semibold text-neutral-3">Transport Fee - {fee.feesType || 'monthly'}</h3>
-                              <p className="text-sm text-neutral-3/70">Amount: ₹{fee.amount}</p>
-                              <p className="text-sm text-neutral-3/70">Due Date: {new Date(fee.dueDate).toLocaleDateString()}</p>
-                              {fee.month && <p className="text-sm text-neutral-3/70">Month: {fee.month}</p>}
-                            </div>
-                            <span className={`px-3 py-1 rounded text-sm ${
-                              fee.status === 'paid' ? 'bg-green-100 text-green-800' :
-                              fee.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                              'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {fee.status.toUpperCase()}
-                            </span>
+                  {fees
+                    .filter((f) => f.feeCategory !== "transport")
+                    .map((fee) => (
+                      <div
+                        key={fee._id}
+                        className="bg-neutral-2 rounded-lg shadow-md p-6"
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="text-lg font-semibold text-neutral-3">
+                              Fee Payment - {fee.feesType || "monthly"}
+                            </h3>
+                            <p className="text-sm text-neutral-3/70">
+                              Amount: ₹{fee.amount}
+                            </p>
+                            <p className="text-sm text-neutral-3/70">
+                              Due Date:{" "}
+                              {formatDateDDMMYYYY(fee.dueDate)}
+                            </p>
+                            {fee.month && (
+                              <p className="text-sm text-neutral-3/70">
+                                Month: {fee.month}
+                              </p>
+                            )}
+                            {fee.installmentNumber && (
+                              <p className="text-sm text-neutral-3/70">
+                                Installment: {fee.installmentNumber}
+                              </p>
+                            )}
+                            {fee.remarks && (
+                              <p className="text-sm text-neutral-3/70 mt-1">
+                                Remarks: {fee.remarks}
+                              </p>
+                            )}
                           </div>
-                          {fee.status === 'paid' && (
-                            <div className="mt-4 p-3 bg-green-50 rounded">
-                              <p className="text-sm text-green-700">Paid on: {new Date(fee.paidDate).toLocaleDateString()}</p>
-                              {fee.paymentMethod && <p className="text-sm text-green-700">Payment Method: {fee.paymentMethod}</p>}
-                            </div>
-                          )}
-                          {fee.status === 'pending' && (
-                            <button
-                              onClick={() => {
-                                const paymentMethod = prompt('Enter payment method (e.g., Online, Cash, Cheque):');
-                                const transactionId = prompt('Enter transaction ID (if applicable):');
-                                if (paymentMethod) {
-                                  handlePayFee(fee._id, { paymentMethod, transactionId: transactionId || '' });
-                                }
-                              }}
-                              className="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
-                            >
-                              Pay Now
-                            </button>
-                          )}
+                          <span
+                            className={`px-3 py-1 rounded text-sm ${
+                              fee.status === "paid"
+                                ? "bg-green-100 text-green-800"
+                                : fee.status === "overdue"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-yellow-100 text-yellow-800"
+                            }`}
+                          >
+                            {fee.status.toUpperCase()}
+                          </span>
                         </div>
-                      ))}
+                        {fee.status === "paid" && (
+                          <div className="mt-4 p-3 bg-green-50 rounded">
+                            <p className="text-sm text-green-700">
+                              Paid on:{" "}
+                              {formatDateDDMMYYYY(fee.paidDate)}
+                            </p>
+                            {fee.paymentMethod && (
+                              <p className="text-sm text-green-700">
+                                Payment Method: {fee.paymentMethod}
+                              </p>
+                            )}
+                            {fee.transactionId && (
+                              <p className="text-sm text-green-700">
+                                Transaction ID: {fee.transactionId}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {fee.status === "pending" && (
+                          <button
+                            onClick={() => {
+                              const paymentMethod = prompt(
+                                "Enter payment method (e.g., Online, Cash, Cheque):",
+                              );
+                              const transactionId = prompt(
+                                "Enter transaction ID (if applicable):",
+                              );
+                              if (paymentMethod) {
+                                handlePayFee(fee._id, {
+                                  paymentMethod,
+                                  transactionId: transactionId || "",
+                                });
+                              }
+                            }}
+                            className="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
+                          >
+                            Pay Now
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  {fees.filter((f) => f.feeCategory === "transport").length >
+                    0 && (
+                    <div className="mt-6">
+                      <h3 className="text-xl font-semibold text-neutral-3 mb-4">
+                        Transport Fees
+                      </h3>
+                      {fees
+                        .filter((f) => f.feeCategory === "transport")
+                        .map((fee) => (
+                          <div
+                            key={fee._id}
+                            className="bg-neutral-2 rounded-lg shadow-md p-6 mb-4"
+                          >
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <h3 className="text-lg font-semibold text-neutral-3">
+                                  Transport Fee - {fee.feesType || "monthly"}
+                                </h3>
+                                <p className="text-sm text-neutral-3/70">
+                                  Amount: ₹{fee.amount}
+                                </p>
+                                <p className="text-sm text-neutral-3/70">
+                                  Due Date:{" "}
+                                  {formatDateDDMMYYYY(fee.dueDate)}
+                                </p>
+                                {fee.month && (
+                                  <p className="text-sm text-neutral-3/70">
+                                    Month: {fee.month}
+                                  </p>
+                                )}
+                              </div>
+                              <span
+                                className={`px-3 py-1 rounded text-sm ${
+                                  fee.status === "paid"
+                                    ? "bg-green-100 text-green-800"
+                                    : fee.status === "overdue"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
+                                {fee.status.toUpperCase()}
+                              </span>
+                            </div>
+                            {fee.status === "paid" && (
+                              <div className="mt-4 p-3 bg-green-50 rounded">
+                                <p className="text-sm text-green-700">
+                                  Paid on:{" "}
+                                  {formatDateDDMMYYYY(fee.paidDate)}
+                                </p>
+                                {fee.paymentMethod && (
+                                  <p className="text-sm text-green-700">
+                                    Payment Method: {fee.paymentMethod}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {fee.status === "pending" && (
+                              <button
+                                onClick={() => {
+                                  const paymentMethod = prompt(
+                                    "Enter payment method (e.g., Online, Cash, Cheque):",
+                                  );
+                                  const transactionId = prompt(
+                                    "Enter transaction ID (if applicable):",
+                                  );
+                                  if (paymentMethod) {
+                                    handlePayFee(fee._id, {
+                                      paymentMethod,
+                                      transactionId: transactionId || "",
+                                    });
+                                  }
+                                }}
+                                className="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
+                              >
+                                Pay Now
+                              </button>
+                            )}
+                          </div>
+                        ))}
                     </div>
                   )}
                   {fines.length > 0 && (
                     <div className="mt-6">
-                      <h3 className="text-xl font-semibold text-neutral-3 mb-4">Fines</h3>
+                      <h3 className="text-xl font-semibold text-neutral-3 mb-4">
+                        Fines
+                      </h3>
                       {fines.map((fine) => (
-                        <div key={fine._id} className={`bg-neutral-2 rounded-lg shadow-md p-6 mb-4 border-l-4 ${fine.fineType === 'late' ? 'border-red-500' : 'border-orange-500'}`}>
+                        <div
+                          key={fine._id}
+                          className={`bg-neutral-2 rounded-lg shadow-md p-6 mb-4 border-l-4 ${fine.fineType === "late" ? "border-red-500" : "border-orange-500"}`}
+                        >
                           <div className="flex justify-between items-start mb-4">
                             <div>
                               <div className="flex items-center space-x-2 mb-2">
-                                <h3 className="text-lg font-semibold text-neutral-3">Fine</h3>
-                                {fine.fineType === 'late' && (
-                                  <span className="px-2 py-1 rounded text-xs bg-red-100 text-red-800">Late Fine</span>
+                                <h3 className="text-lg font-semibold text-neutral-3">
+                                  Fine
+                                </h3>
+                                {fine.fineType === "late" && (
+                                  <span className="px-2 py-1 rounded text-xs bg-red-100 text-red-800">
+                                    Late Fine
+                                  </span>
                                 )}
                               </div>
-                              <p className="text-sm text-neutral-3/70">Amount: ₹{fine.amount}</p>
-                              <p className="text-sm text-neutral-3/70">Reason: {fine.reason}</p>
-                              <p className="text-sm text-neutral-3/70">Due Date: {new Date(fine.dueDate).toLocaleDateString()}</p>
-                              {fine.remarks && <p className="text-sm text-neutral-3/70 mt-1">Remarks: {fine.remarks}</p>}
+                              <p className="text-sm text-neutral-3/70">
+                                Amount: ₹{fine.amount}
+                              </p>
+                              <p className="text-sm text-neutral-3/70">
+                                Reason: {fine.reason}
+                              </p>
+                              <p className="text-sm text-neutral-3/70">
+                                Due Date:{" "}
+                                {formatDateDDMMYYYY(fine.dueDate)}
+                              </p>
+                              {fine.remarks && (
+                                <p className="text-sm text-neutral-3/70 mt-1">
+                                  Remarks: {fine.remarks}
+                                </p>
+                              )}
                             </div>
-                            <span className={`px-3 py-1 rounded text-sm ${
-                              fine.status === 'paid' ? 'bg-green-100 text-green-800' :
-                              fine.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                              'bg-yellow-100 text-yellow-800'
-                            }`}>
+                            <span
+                              className={`px-3 py-1 rounded text-sm ${
+                                fine.status === "paid"
+                                  ? "bg-green-100 text-green-800"
+                                  : fine.status === "overdue"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
                               {fine.status.toUpperCase()}
                             </span>
                           </div>
-                          {fine.status === 'paid' && (
+                          {fine.status === "paid" && (
                             <div className="mt-4 p-3 bg-green-50 rounded">
-                              <p className="text-sm text-green-700">Paid on: {new Date(fine.paidDate).toLocaleDateString()}</p>
-                              {fine.paymentMethod && <p className="text-sm text-green-700">Payment Method: {fine.paymentMethod}</p>}
+                              <p className="text-sm text-green-700">
+                                Paid on:{" "}
+                                {formatDateDDMMYYYY(fine.paidDate)}
+                              </p>
+                              {fine.paymentMethod && (
+                                <p className="text-sm text-green-700">
+                                  Payment Method: {fine.paymentMethod}
+                                </p>
+                              )}
                             </div>
                           )}
-                          {fine.status === 'pending' && (
+                          {fine.status === "pending" && (
                             <button
                               onClick={async () => {
-                                const paymentMethod = prompt('Enter payment method (e.g., Online, Cash, Cheque):');
-                                const transactionId = prompt('Enter transaction ID (if applicable):');
+                                const paymentMethod = prompt(
+                                  "Enter payment method (e.g., Online, Cash, Cheque):",
+                                );
+                                const transactionId = prompt(
+                                  "Enter transaction ID (if applicable):",
+                                );
                                 if (paymentMethod) {
                                   try {
-                                    await axios.put(`${API_BASE_URL}/api/fines/${fine._id}/pay`, { paymentMethod, transactionId: transactionId || '' });
+                                    await axios.put(
+                                      `${API_BASE_URL}/api/fines/${fine._id}/pay`,
+                                      {
+                                        paymentMethod,
+                                        transactionId: transactionId || "",
+                                      },
+                                    );
                                     fetchData();
-                                    alert('Fine payment submitted successfully!');
+                                    alert(
+                                      "Fine payment submitted successfully!",
+                                    );
                                   } catch (error) {
-                                    console.error('Error paying fine:', error);
-                                    alert('Error submitting payment');
+                                    console.error("Error paying fine:", error);
+                                    alert("Error submitting payment");
                                   }
                                 }
                               }}
@@ -450,10 +747,12 @@ const StudentDashboard = () => {
           </div>
         );
 
-      case 'notifications':
+      case "notifications":
         return (
           <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">Notifications</h2>
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              Notifications
+            </h2>
             <div className="space-y-4">
               {notifications.length === 0 ? (
                 <div className="bg-neutral-2 rounded-lg shadow-md p-6 text-center">
@@ -461,11 +760,18 @@ const StudentDashboard = () => {
                 </div>
               ) : (
                 notifications.map((notification) => (
-                  <div key={notification._id} className="bg-neutral-2 rounded-lg shadow-md p-6 border-l-4 border-secondary">
-                    <h3 className="font-semibold text-neutral-3 mb-2">{notification.title}</h3>
-                    <p className="text-sm text-neutral-3/70 mb-2">{notification.message}</p>
+                  <div
+                    key={notification._id}
+                    className="bg-neutral-2 rounded-lg shadow-md p-6 border-l-4 border-secondary"
+                  >
+                    <h3 className="font-semibold text-neutral-3 mb-2">
+                      {notification.title}
+                    </h3>
+                    <p className="text-sm text-neutral-3/70 mb-2">
+                      {notification.message}
+                    </p>
                     <p className="text-xs text-neutral-3/50">
-                      {new Date(notification.createdAt).toLocaleDateString()}
+                      {formatDateDDMMYYYY(notification.createdAt)}
                     </p>
                   </div>
                 ))
@@ -474,28 +780,43 @@ const StudentDashboard = () => {
           </div>
         );
 
-      case 'classTeacher':
+      case "classTeacher":
         return (
           <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">Class Teacher</h2>
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              Class Teacher
+            </h2>
             {classTeacher ? (
               <div className="bg-neutral-2 rounded-lg shadow-md p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Teacher Name</label>
-                    <p className="text-neutral-3 font-semibold text-lg">{classTeacher.teacherId?.name || 'N/A'}</p>
+                    <label className="text-neutral-3/70 text-sm">
+                      Teacher Name
+                    </label>
+                    <p className="text-neutral-3 font-semibold text-lg">
+                      {classTeacher.teacherId?.name || "N/A"}
+                    </p>
                   </div>
                   <div>
                     <label className="text-neutral-3/70 text-sm">Email</label>
-                    <p className="text-neutral-3 font-semibold">{classTeacher.teacherId?.email || 'Not Set'}</p>
+                    <p className="text-neutral-3 font-semibold">
+                      {classTeacher.teacherId?.email || "Not Set"}
+                    </p>
                   </div>
                   <div>
-                    <label className="text-neutral-3/70 text-sm">Contact Number</label>
-                    <p className="text-neutral-3 font-semibold">{classTeacher.teacherId?.phone || 'Not Set'}</p>
+                    <label className="text-neutral-3/70 text-sm">
+                      Contact Number
+                    </label>
+                    <p className="text-neutral-3 font-semibold">
+                      {classTeacher.teacherId?.phone || "Not Set"}
+                    </p>
                   </div>
                   <div>
                     <label className="text-neutral-3/70 text-sm">Class</label>
-                    <p className="text-neutral-3 font-semibold">{classTeacher.className} {classTeacher.section ? `- ${classTeacher.section}` : ''}</p>
+                    <p className="text-neutral-3 font-semibold">
+                      {classTeacher.className}{" "}
+                      {classTeacher.section ? `- ${classTeacher.section}` : ""}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -507,7 +828,7 @@ const StudentDashboard = () => {
           </div>
         );
 
-      case 'events':
+      case "events":
         return (
           <div>
             <h2 className="text-2xl font-bold text-neutral-3 mb-6">Events</h2>
@@ -518,13 +839,20 @@ const StudentDashboard = () => {
                 </div>
               ) : (
                 events.map((event) => (
-                  <div key={event._id} className="bg-neutral-2 rounded-lg shadow-md p-6 border-l-4 border-secondary">
-                    <h3 className="font-semibold text-neutral-3 mb-2">{event.title}</h3>
-                    <p className="text-sm text-neutral-3/70 mb-2">{event.description}</p>
+                  <div
+                    key={event._id}
+                    className="bg-neutral-2 rounded-lg shadow-md p-6 border-l-4 border-secondary"
+                  >
+                    <h3 className="font-semibold text-neutral-3 mb-2">
+                      {event.title}
+                    </h3>
+                    <p className="text-sm text-neutral-3/70 mb-2">
+                      {event.description}
+                    </p>
                     <div className="space-y-1">
                       <p className="text-xs text-neutral-3/50">
                         <FiCalendar className="inline mr-1" />
-                        {new Date(event.date).toLocaleDateString()}
+                        {formatDateDDMMYYYY(event.date)}
                       </p>
                       {event.location && (
                         <p className="text-xs text-neutral-3/50">
@@ -546,28 +874,62 @@ const StudentDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-1">
+    <div className="ui-dashboard-shell">
       <Header />
       <div className="flex-grow">
-        <div className="container mx-auto px-4 py-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-neutral-3 mb-2">Student Dashboard</h1>
-            <p className="text-neutral-3/70">Welcome back, {user?.name}</p>
+        <div className="ui-dashboard-main">
+          <div className="ui-dashboard-hero">
+            <h1 className="text-3xl font-bold text-slate-900">
+              Dashboard
+            </h1>
+            <p className="mt-1 text-sm text-slate-600 sm:text-base">
+              Welcome back, {user?.name}
+            </p>
+            {studentData?.class && (
+              <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                Class {studentData.class}
+              </p>
+            )}
           </div>
 
-          {/* Tabs */}
-          <div className="bg-neutral-2 rounded-lg shadow-md mb-6">
-            <div className="flex flex-wrap border-b border-neutral-1">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
+            {dashboardStats.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <article
+                  key={item.label}
+                  className="ui-stat-card ui-fade-up"
+                  style={{ animationDelay: `${index * 60}ms` }}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {item.label}
+                    </p>
+                    <Icon className="text-secondary" />
+                  </div>
+                  <p className="mt-2 text-3xl font-bold text-slate-900">
+                    {item.value}
+                  </p>
+                  {item.hint && (
+                    <p className="mt-1 text-xs text-slate-500 leading-snug">
+                      {item.hint}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="ui-dashboard-tabs">
+            <div className="ui-dashboard-tab-row">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center space-x-2 px-6 py-4 font-semibold transition ${
-                      activeTab === tab.id
-                        ? 'text-primary border-b-2 border-primary'
-                        : 'text-neutral-3/70 hover:text-primary'
+                    className={`ui-dashboard-tab ${
+                      activeTab === tab.id ? "ui-dashboard-tab-active" : ""
                     }`}
                   >
                     <Icon />
@@ -578,7 +940,6 @@ const StudentDashboard = () => {
             </div>
           </div>
 
-          {/* Tab Content */}
           {renderContent()}
         </div>
       </div>

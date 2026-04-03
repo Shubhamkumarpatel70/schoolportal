@@ -1,108 +1,139 @@
 import React from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { FiTarget, FiEye, FiHeart } from 'react-icons/fi';
+import { FiAward, FiBookOpen, FiEye, FiHeart, FiTarget, FiUsers } from 'react-icons/fi';
 
 const About = () => {
+  const values = [
+    {
+      title: 'Excellence',
+      description: 'We set clear standards and continuously improve learning outcomes.'
+    },
+    {
+      title: 'Integrity',
+      description: 'We lead with transparency, respect, and accountability.'
+    },
+    {
+      title: 'Innovation',
+      description: 'We integrate modern tools to make education more engaging and effective.'
+    }
+  ];
+
+  const highlights = [
+    {
+      title: 'Learner-Centric Curriculum',
+      description: 'Academic plans are structured around comprehension, consistency, and confidence.',
+      icon: FiBookOpen
+    },
+    {
+      title: 'Mentor-Led Guidance',
+      description: 'Teachers and coordinators actively support each student’s personal growth plan.',
+      icon: FiUsers
+    },
+    {
+      title: 'Performance Transparency',
+      description: 'Families receive timely updates through a clear and centralized communication flow.',
+      icon: FiAward
+    }
+  ];
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="ui-shell">
       <Header />
-      
+
       <div className="flex-grow">
-        {/* Hero Section */}
-        <section className="bg-gradient-to-r from-primary to-primary-600 text-white py-16">
-          <div className="container mx-auto px-4 text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">About Us</h1>
-            <p className="text-xl text-white/90">
-              Learn more about our mission and values
+        <section className="ui-hero">
+          <div className="ui-container relative text-center">
+            <h1 className="text-4xl font-bold sm:text-5xl">About Our Institution</h1>
+            <p className="mx-auto mt-4 max-w-2xl text-sm text-white/90 sm:text-lg">
+              Building confident learners through discipline, innovation, and strong academic support.
             </p>
           </div>
         </section>
 
-        {/* Mission Section */}
-        <section className="py-16 bg-neutral-1">
-          <div className="container mx-auto px-4">
-            <div className="max-w-4xl mx-auto">
-              <div className="text-center mb-12">
-                <FiTarget className="text-5xl text-secondary mx-auto mb-4" />
-                <h2 className="text-3xl font-bold mb-4 text-neutral-3">Our Mission</h2>
-                <p className="text-lg text-neutral-3/70">
-                  To provide quality education that empowers students to achieve their full potential
-                  and become responsible citizens of the world.
+        <section className="ui-section">
+          <div className="ui-container">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <article className="ui-card p-7 sm:p-8">
+                <FiTarget className="text-4xl text-secondary" />
+                <h2 className="mt-5 text-2xl font-bold text-slate-900">Our Mission</h2>
+                <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+                  To deliver high-quality education that empowers students to reach their full potential and become
+                  responsible citizens.
                 </p>
-              </div>
+              </article>
 
-              <div className="text-center mb-12">
-                <FiEye className="text-5xl text-secondary mx-auto mb-4" />
-                <h2 className="text-3xl font-bold mb-4 text-neutral-3">Our Vision</h2>
-                <p className="text-lg text-neutral-3/70">
-                  To be a leading educational institution recognized for academic excellence,
-                  innovation, and commitment to student success.
+              <article className="ui-card p-7 sm:p-8">
+                <FiEye className="text-4xl text-secondary" />
+                <h2 className="mt-5 text-2xl font-bold text-slate-900">Our Vision</h2>
+                <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+                  To be a benchmark institution recognized for academic excellence, student wellbeing, and future-ready
+                  learning practices.
                 </p>
-              </div>
+              </article>
+            </div>
 
-              <div className="text-center mb-12">
-                <FiHeart className="text-5xl text-accent mx-auto mb-4" />
-                <h2 className="text-3xl font-bold mb-4 text-neutral-3">Our Values</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-                  <div className="bg-neutral-2 p-6 rounded-lg shadow-md">
-                    <h3 className="font-semibold text-lg mb-2 text-neutral-3">Excellence</h3>
-                    <p className="text-neutral-3/70">
-                      Striving for the highest standards in everything we do
-                    </p>
-                  </div>
-                  <div className="bg-neutral-2 p-6 rounded-lg shadow-md">
-                    <h3 className="font-semibold text-lg mb-2 text-neutral-3">Integrity</h3>
-                    <p className="text-neutral-3/70">
-                      Acting with honesty and ethical principles
-                    </p>
-                  </div>
-                  <div className="bg-neutral-2 p-6 rounded-lg shadow-md">
-                    <h3 className="font-semibold text-lg mb-2 text-neutral-3">Innovation</h3>
-                    <p className="text-neutral-3/70">
-                      Embracing new ideas and technologies
-                    </p>
-                  </div>
-                </div>
+            <div className="mt-6 ui-card p-7 sm:p-8">
+              <div className="mb-6 flex items-center gap-3">
+                <FiHeart className="text-3xl text-accent" />
+                <h2 className="text-2xl font-bold text-slate-900">Our Core Values</h2>
               </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {values.map((value) => (
+                  <div key={value.title} className="ui-card-soft p-5">
+                    <h3 className="text-lg font-semibold text-slate-900">{value.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{value.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {highlights.map((item, index) => {
+                const Icon = item.icon;
+                return (
+                  <article
+                    key={item.title}
+                    className="ui-card ui-fade-up p-6"
+                    style={{ animationDelay: `${index * 70}ms` }}
+                  >
+                    <Icon className="text-3xl text-secondary" />
+                    <h3 className="mt-4 text-lg font-semibold text-slate-900">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{item.description}</p>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        {/* From the Desk of Director/Principal */}
-        <section className="py-16 bg-neutral-2">
-          <div className="container mx-auto px-4">
-            <div className="max-w-4xl mx-auto">
-              <div className="bg-neutral-1 p-8 md:p-12 rounded-lg shadow-lg">
-                <div className="text-center mb-8">
-                  <h2 className="text-3xl font-bold text-neutral-3 mb-4">From the Desk of Principal</h2>
-                  <div className="w-24 h-1 bg-accent mx-auto mb-6"></div>
+        <section className="ui-section pt-2">
+          <div className="ui-container">
+            <article className="ui-card overflow-hidden">
+              <div className="border-b border-slate-200 bg-slate-50/80 px-6 py-4 sm:px-10">
+                <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
+                  <FiAward className="text-secondary" />
+                  From the Principal's Desk
+                </h2>
+              </div>
+              <div className="grid gap-6 p-6 sm:grid-cols-[auto_1fr] sm:p-10">
+                <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-3xl font-bold text-white sm:mx-0 sm:h-28 sm:w-28">
+                  P
                 </div>
-                <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-                  <div className="w-32 h-32 bg-primary rounded-full flex items-center justify-center text-white text-4xl font-bold flex-shrink-0">
-                    P
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-2xl font-semibold text-neutral-3 mb-2">Principal Name</h3>
-                    <p className="text-neutral-3/70 mb-4 italic">Principal, School Portal</p>
-                    <p className="text-neutral-3/70 leading-relaxed mb-4">
-                      "Welcome to our school portal! It is with great pleasure that I extend my warmest greetings 
-                      to all students, parents, teachers, and staff members. Our institution has always been 
-                      committed to providing quality education and fostering an environment where every student 
-                      can thrive and achieve their full potential."
-                    </p>
-                    <p className="text-neutral-3/70 leading-relaxed">
-                      "Through this portal, we aim to enhance communication, streamline administrative processes, 
-                      and provide easy access to important information. I encourage everyone to make full use of 
-                      this platform to stay connected and engaged with our school community."
-                    </p>
-                    <p className="text-neutral-3/70 mt-4 font-semibold">
-                      - Principal Name
-                    </p>
-                  </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900">Principal Name</h3>
+                  <p className="mt-1 text-sm font-medium text-slate-500">Principal, School Portal</p>
+                  <p className="mt-5 text-sm leading-7 text-slate-600">
+                    Welcome to our digital campus platform. We are committed to building an environment where every
+                    learner can grow academically and personally with confidence.
+                  </p>
+                  <p className="mt-4 text-sm leading-7 text-slate-600">
+                    This portal strengthens communication between families, teachers, and administration while giving
+                    students faster access to notices, events, and academic updates.
+                  </p>
                 </div>
               </div>
-            </div>
+            </article>
           </div>
         </section>
       </div>

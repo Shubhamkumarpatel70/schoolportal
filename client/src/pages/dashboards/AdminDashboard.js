@@ -1,26 +1,372 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import Header from '../../components/Header';
-import Footer from '../../components/Footer';
-import axios from 'axios';
-import { API_BASE_URL } from '../../utils/api';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import Header from "../../components/Header";
+import Footer from "../../components/Footer";
+import axios from "axios";
+import { API_BASE_URL } from "../../utils/api";
+import { formatDateDDMMYYYY, toDateKeyYMD } from "../../utils/date";
 import {
-  FiUsers, FiCalendar, FiBell, FiImage, FiMail, FiFileText, FiUserPlus,
-  FiMenu, FiX, FiSettings, FiUpload, FiEdit, FiTrash2, FiDollarSign, FiAward
-} from 'react-icons/fi';
+  FiUsers,
+  FiCalendar,
+  FiBell,
+  FiImage,
+  FiMail,
+  FiFileText,
+  FiUserPlus,
+  FiMenu,
+  FiX,
+  FiSettings,
+  FiUpload,
+  FiEdit,
+  FiTrash2,
+  FiDollarSign,
+  FiAward,
+} from "react-icons/fi";
+
+const SUNDAY_OVERRIDE_TITLE = "Sunday Attendance Enabled";
 
 const AdminDashboard = () => {
+  // Attendance states
+  const [attendanceClass, setAttendanceClass] = useState("");
+  const [attendanceMonth, setAttendanceMonth] = useState(
+    new Date().getMonth() + 1,
+  );
+  const [attendanceYear, setAttendanceYear] = useState(
+    new Date().getFullYear(),
+  );
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [attendanceHolidays, setAttendanceHolidays] = useState([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState("");
+  const [attendanceDateInput, setAttendanceDateInput] = useState(
+    new Date().toISOString().split("T")[0],
+  );
+  const [attendanceRollNumber, setAttendanceRollNumber] = useState("");
+  const [attendanceStudentResult, setAttendanceStudentResult] = useState(null);
+  const [attendanceSelectedStatus, setAttendanceSelectedStatus] = useState("");
+  const [attendanceStudentMonthRecords, setAttendanceStudentMonthRecords] =
+    useState([]);
+  const [attendanceActionLoading, setAttendanceActionLoading] = useState(false);
+  const [holidayForm, setHolidayForm] = useState({
+    title: "",
+    date: new Date().toISOString().split("T")[0],
+    description: "",
+  });
+  const [holidayActionLoading, setHolidayActionLoading] = useState(false);
+
+  const fetchAttendanceHolidays = async (month, year) => {
+    const res = await axios.get(
+      `${API_BASE_URL}/api/holidays?month=${month}&year=${year}`,
+    );
+    return res.data || [];
+  };
+
+  const refreshCurrentMonthHolidays = async () => {
+    try {
+      const holidaysRes = await fetchAttendanceHolidays(
+        attendanceMonth,
+        attendanceYear,
+      );
+      setAttendanceHolidays(holidaysRes);
+    } catch (error) {
+      setAttendanceError("Failed to refresh holidays.");
+    }
+  };
+
+  const isSundayAttendanceOverride = (holiday) =>
+    String(holiday?.title || "").trim().toLowerCase() ===
+    SUNDAY_OVERRIDE_TITLE.toLowerCase();
+
+  const handleAttendanceFetch = async (e) => {
+    e.preventDefault();
+    if (!attendanceClass || !attendanceMonth || !attendanceYear) return;
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    setAttendanceStudentResult(null);
+    setAttendanceStudentMonthRecords([]);
+    setAttendanceSelectedStatus("");
+    try {
+      const [attendanceRes, holidaysRes] = await Promise.all([
+        axios.get(
+          `${API_BASE_URL}/api/attendance/class/${attendanceClass}?month=${attendanceMonth}&year=${attendanceYear}`,
+        ),
+        fetchAttendanceHolidays(attendanceMonth, attendanceYear),
+      ]);
+      setAttendanceData(attendanceRes.data);
+      setAttendanceHolidays(holidaysRes);
+    } catch (err) {
+      setAttendanceError("Failed to fetch attendance data.");
+      setAttendanceData([]);
+      setAttendanceHolidays([]);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  const handleAttendanceStudentSearch = async (e) => {
+    e.preventDefault();
+    setAttendanceStudentResult(null);
+    setAttendanceSelectedStatus("");
+    setAttendanceError("");
+
+    if (!attendanceClass || !attendanceRollNumber.trim()) {
+      setAttendanceError("Please select class and enter roll number.");
+      return;
+    }
+
+    const selectedClass = classes.find((cls) => cls._id === attendanceClass);
+    if (!selectedClass) {
+      setAttendanceError("Selected class not found.");
+      return;
+    }
+
+    const normalizedRoll = attendanceRollNumber.trim().toLowerCase();
+    const foundStudent = students.find(
+      (student) =>
+        student.class === selectedClass.className &&
+        String(student.rollNumber || "").toLowerCase() === normalizedRoll,
+    );
+
+    if (!foundStudent) {
+      setAttendanceError("No student found for this class and roll number.");
+      return;
+    }
+
+    try {
+      const [attendanceRes, holidaysRes] = await Promise.all([
+        axios.get(
+          `${API_BASE_URL}/api/attendance/class/${attendanceClass}?month=${attendanceMonth}&year=${attendanceYear}`,
+        ),
+        fetchAttendanceHolidays(attendanceMonth, attendanceYear),
+      ]);
+      const monthRecords = attendanceRes.data || [];
+      setAttendanceData(monthRecords);
+      setAttendanceHolidays(holidaysRes);
+      selectAttendanceStudentFromMonthRecords(foundStudent, monthRecords);
+    } catch (error) {
+      setAttendanceSelectedStatus("");
+      setAttendanceStudentMonthRecords([]);
+    }
+  };
+
+  const handleMarkSingleAttendance = async (status) => {
+    if (!attendanceStudentResult || !attendanceClass) return;
+    const selectedIsoDate = attendanceDateInput;
+    if (!selectedIsoDate) {
+      setAttendanceError("Please select a date.");
+      return;
+    }
+    const holidayOnSelectedDate = attendanceHolidays.find(
+      (holiday) =>
+        !isSundayAttendanceOverride(holiday) &&
+        toDateKeyYMD(holiday.date) === selectedIsoDate,
+    );
+    const selectedDateObj = new Date(selectedIsoDate);
+    const isSunday = !Number.isNaN(selectedDateObj.getTime()) && selectedDateObj.getDay() === 0;
+    const isEnabledSunday = sundayEnabledOverrideDateSet.has(selectedIsoDate);
+    if (isSunday && !isEnabledSunday) {
+      setAttendanceError("Cannot mark attendance on holiday: Sunday Off");
+      return;
+    }
+    if (holidayOnSelectedDate) {
+      setAttendanceError(
+        `Cannot mark attendance on holiday: ${holidayOnSelectedDate.title}`,
+      );
+      return;
+    }
+
+    setAttendanceActionLoading(true);
+    setAttendanceError("");
+    try {
+      await axios.post(`${API_BASE_URL}/api/attendance/mark`, {
+        classId: attendanceClass,
+        date: selectedIsoDate,
+        attendance: [{ studentId: attendanceStudentResult._id, status }],
+      });
+
+      alert(
+        `${attendanceStudentResult.studentName} marked ${status.toLowerCase()} successfully.`,
+      );
+      setAttendanceSelectedStatus(status);
+
+      // Refresh monthly records and selected student calendar data
+      const [attendanceRes, holidaysRes] = await Promise.all([
+        axios.get(
+          `${API_BASE_URL}/api/attendance/class/${attendanceClass}?month=${attendanceMonth}&year=${attendanceYear}`,
+        ),
+        fetchAttendanceHolidays(attendanceMonth, attendanceYear),
+      ]);
+      const monthRecords = attendanceRes.data || [];
+      setAttendanceData(monthRecords);
+      setAttendanceHolidays(holidaysRes);
+      const studentRecords = monthRecords.filter((record) => {
+        const recordStudentId =
+          typeof record.student === "object" ? record.student?._id : record.student;
+        return recordStudentId === attendanceStudentResult._id;
+      });
+      setAttendanceStudentMonthRecords(studentRecords);
+
+      const selectedDateISO = selectedIsoDate;
+      const updatedSelectedDateRecord = studentRecords.find(
+        (record) => toDateKeyYMD(record.date) === selectedDateISO,
+      );
+      setAttendanceSelectedStatus(updatedSelectedDateRecord?.status || status);
+    } catch (error) {
+      setAttendanceError(
+        error.response?.data?.error || "Failed to mark attendance.",
+      );
+    } finally {
+      setAttendanceActionLoading(false);
+    }
+  };
+
+  const selectAttendanceStudentFromMonthRecords = (studentInfo, monthRecords) => {
+    setAttendanceStudentResult(studentInfo);
+    const studentRecords = (monthRecords || []).filter((record) => {
+      const recordStudentId =
+        typeof record.student === "object" ? record.student?._id : record.student;
+      return recordStudentId === studentInfo._id;
+    });
+    setAttendanceStudentMonthRecords(studentRecords);
+    const selectedDateISO = attendanceDateInput;
+    if (!selectedDateISO) {
+      setAttendanceSelectedStatus("");
+      return;
+    }
+    const existingRecord = studentRecords.find(
+      (record) => toDateKeyYMD(record.date) === selectedDateISO,
+    );
+    setAttendanceSelectedStatus(existingRecord?.status || "");
+  };
+
+  const handleFindAttendanceStudentByRoll = () => {
+    setAttendanceError("");
+    const normalizedRoll = attendanceRollNumber.trim().toLowerCase();
+    if (!normalizedRoll) {
+      setAttendanceError("Enter roll number to find student.");
+      return;
+    }
+    const matchedStudent = attendanceStudentCards.find(
+      (student) => String(student.rollNumber || "").toLowerCase() === normalizedRoll,
+    );
+    if (!matchedStudent) {
+      setAttendanceError("Roll number not found in fetched attendance.");
+      return;
+    }
+    selectAttendanceStudentFromMonthRecords(
+      {
+        _id: matchedStudent._id,
+        studentName: matchedStudent.studentName,
+        rollNumber: matchedStudent.rollNumber,
+        class: matchedStudent.class,
+      },
+      attendanceData,
+    );
+  };
+
+  const handleAddHoliday = async (e) => {
+    e.preventDefault();
+    if (!holidayForm.title || !holidayForm.date) {
+      setAttendanceError("Holiday title and date are required.");
+      return;
+    }
+    setHolidayActionLoading(true);
+    setAttendanceError("");
+    try {
+      const payload = {
+        title: holidayForm.title,
+        date: holidayForm.date,
+        description: holidayForm.description,
+      };
+      try {
+        await axios.post(`${API_BASE_URL}/api/holidays`, payload);
+      } catch (postError) {
+        // If this date was used for Sunday override, replace it with the manual holiday.
+        if (postError.response?.status === 409) {
+          const dateKey = toDateKeyYMD(holidayForm.date);
+          const overrideEntry = attendanceHolidays.find(
+            (holiday) =>
+              isSundayAttendanceOverride(holiday) &&
+              toDateKeyYMD(holiday.date) === dateKey,
+          );
+          if (!overrideEntry?._id) {
+            throw postError;
+          }
+          await axios.delete(`${API_BASE_URL}/api/holidays/${overrideEntry._id}`);
+          await axios.post(`${API_BASE_URL}/api/holidays`, payload);
+        } else {
+          throw postError;
+        }
+      }
+      setHolidayForm((prev) => ({ ...prev, title: "", description: "" }));
+      await refreshCurrentMonthHolidays();
+      alert("Holiday added.");
+    } catch (error) {
+      setAttendanceError(
+        error.response?.data?.message || "Failed to add holiday.",
+      );
+    } finally {
+      setHolidayActionLoading(false);
+    }
+  };
+
+  const handleDeleteHoliday = async (holidayId) => {
+    if (!window.confirm("Delete this holiday?")) return;
+    setHolidayActionLoading(true);
+    setAttendanceError("");
+    try {
+      await axios.delete(`${API_BASE_URL}/api/holidays/${holidayId}`);
+      await refreshCurrentMonthHolidays();
+      alert("Holiday deleted.");
+    } catch (error) {
+      setAttendanceError(
+        error.response?.data?.message || "Failed to delete holiday.",
+      );
+    } finally {
+      setHolidayActionLoading(false);
+    }
+  };
+
+  const handleToggleSundayWorking = async (dateKey) => {
+    const overrideEntry = attendanceHolidays.find(
+      (holiday) =>
+        isSundayAttendanceOverride(holiday) &&
+        toDateKeyYMD(holiday.date) === dateKey,
+    );
+    setHolidayActionLoading(true);
+    setAttendanceError("");
+    try {
+      if (overrideEntry?._id) {
+        await axios.delete(`${API_BASE_URL}/api/holidays/${overrideEntry._id}`);
+      } else {
+        await axios.post(`${API_BASE_URL}/api/holidays`, {
+          title: SUNDAY_OVERRIDE_TITLE,
+          date: dateKey,
+          description: "Allows attendance marking on Sunday",
+        });
+      }
+      await refreshCurrentMonthHolidays();
+    } catch (error) {
+      setAttendanceError(
+        error.response?.data?.message || "Failed to update Sunday toggle.",
+      );
+    } finally {
+      setHolidayActionLoading(false);
+    }
+  };
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
+  );
   const [stats, setStats] = useState({
     users: 0,
     events: 0,
     notifications: 0,
     contacts: 0,
-    students: 0
+    students: 0,
   });
 
   // Data states
@@ -39,9 +385,9 @@ const AdminDashboard = () => {
   const [teachers, setTeachers] = useState([]);
   const [enrollmentNumbers, setEnrollmentNumbers] = useState([]);
   const [examResults, setExamResults] = useState([]);
-  const [selectedClassForExam, setSelectedClassForExam] = useState('');
+  const [selectedClassForExam, setSelectedClassForExam] = useState("");
   const [notices, setNotices] = useState([]);
-  const [selectedClassForStudents, setSelectedClassForStudents] = useState('');
+  const [selectedClassForStudents, setSelectedClassForStudents] = useState("");
 
   // Form states
   const [showEventForm, setShowEventForm] = useState(false);
@@ -53,11 +399,16 @@ const AdminDashboard = () => {
   const [showFeeForm, setShowFeeForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [userForm, setUserForm] = useState({
-    name: '', email: '', phone: '', address: '', role: 'student'
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    role: "student",
   });
   const [showUserForm, setShowUserForm] = useState(false);
   const [userFilters, setUserFilters] = useState({
-    role: '', search: ''
+    role: "",
+    search: "",
   });
   const [editingStudent, setEditingStudent] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
@@ -69,62 +420,144 @@ const AdminDashboard = () => {
   const [editingEnrollment, setEditingEnrollment] = useState(null);
   const [editingFee, setEditingFee] = useState(null);
   const [editingTeacher, setEditingTeacher] = useState(null);
-  const [imageUploadType, setImageUploadType] = useState('link'); // 'link' or 'file'
+  const [imageUploadType, setImageUploadType] = useState("link"); // 'link' or 'file'
   const [showTeacherForm, setShowTeacherForm] = useState(false);
   const [showNoticeForm, setShowNoticeForm] = useState(false);
   const [editingNotice, setEditingNotice] = useState(null);
-  const [feeStudentSearchQuery, setFeeStudentSearchQuery] = useState('');
+  const [feeStudentSearchQuery, setFeeStudentSearchQuery] = useState("");
   const [feeSearchResults, setFeeSearchResults] = useState([]);
-  const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
+  const [teacherSearchQuery, setTeacherSearchQuery] = useState("");
   const [teacherSearchResults, setTeacherSearchResults] = useState([]);
   const [feeFilters, setFeeFilters] = useState({
-    class: '',
-    status: '',
-    feeCategory: '',
-    feesType: '',
-    studentSearch: ''
+    class: "",
+    status: "",
+    feeCategory: "",
+    feesType: "",
+    studentSearch: "",
   });
-  const [fineStudentSearchQuery, setFineStudentSearchQuery] = useState('');
+  const [fineStudentSearchQuery, setFineStudentSearchQuery] = useState("");
   const [fineSearchResults, setFineSearchResults] = useState([]);
   const [fineFilters, setFineFilters] = useState({
-    class: '', status: '', fineType: '', studentSearch: ''
+    class: "",
+    status: "",
+    fineType: "",
+    studentSearch: "",
   });
 
-  const [eventForm, setEventForm] = useState({ title: '', description: '', date: '', location: '' });
-  const [notificationForm, setNotificationForm] = useState({ title: '', message: '', type: 'general', targetRole: 'all' });
-  const [carouselForm, setCarouselForm] = useState({ image: '', title: '', description: '', order: 0 });
-  const [galleryForm, setGalleryForm] = useState({ image: '', galleryName: '', title: '', description: '' });
+  const [eventForm, setEventForm] = useState({
+    title: "",
+    description: "",
+    date: "",
+    location: "",
+  });
+  const [notificationForm, setNotificationForm] = useState({
+    title: "",
+    message: "",
+    type: "general",
+    targetRole: "all",
+  });
+  const [carouselForm, setCarouselForm] = useState({
+    image: "",
+    title: "",
+    description: "",
+    order: 0,
+  });
+  const [galleryForm, setGalleryForm] = useState({
+    image: "",
+    galleryName: "",
+    title: "",
+    description: "",
+  });
   const [studentForm, setStudentForm] = useState({
-    studentName: '', fathersName: '', mothersName: '', address: '', class: '',
-    rollNumber: '', enrollmentNumber: '', mobileNumber: '', studentType: 'dayScholar', busRoute: '', email: '', transportOpted: false
+    studentName: "",
+    fathersName: "",
+    mothersName: "",
+    address: "",
+    class: "",
+    rollNumber: "",
+    enrollmentNumber: "",
+    mobileNumber: "",
+    studentType: "dayScholar",
+    busRoute: "",
+    email: "",
+    transportOpted: false,
   });
   const [enrollmentDetails, setEnrollmentDetails] = useState(null);
   const [enrollmentLoading, setEnrollmentLoading] = useState(false);
-  const [classTeacherForm, setClassTeacherForm] = useState({ teacherId: '', className: '', section: '' });
-  const [classForm, setClassForm] = useState({ className: '', section: '', description: '' });
-  const [enrollmentForm, setEnrollmentForm] = useState({ enrollmentNumber: '', name: '' });
+  const [classTeacherForm, setClassTeacherForm] = useState({
+    teacherId: "",
+    className: "",
+    section: "",
+  });
+  const [classForm, setClassForm] = useState({
+    className: "",
+    section: "",
+    description: "",
+  });
+  const [enrollmentForm, setEnrollmentForm] = useState({
+    enrollmentNumber: "",
+    name: "",
+  });
   const [feeForm, setFeeForm] = useState({
-    selectedClass: '', selectedStudent: '', studentName: '', amount: '', feesType: 'monthly',
-    month: '', installmentNumber: '', dueDate: '', remarks: '', feeCategory: 'regular', transportAmount: ''
+    selectedClass: "",
+    selectedStudent: "",
+    studentName: "",
+    amount: "",
+    feesType: "monthly",
+    month: "",
+    installmentNumber: "",
+    dueDate: "",
+    remarks: "",
+    feeCategory: "regular",
+    transportAmount: "",
   });
   const [fineForm, setFineForm] = useState({
-    selectedStudent: '', studentName: '', amount: '', reason: '', dueDate: '', remarks: '', fineType: 'other'
+    selectedStudent: "",
+    studentName: "",
+    amount: "",
+    reason: "",
+    dueDate: "",
+    remarks: "",
+    fineType: "other",
   });
-  const [noticeForm, setNoticeForm] = useState({ title: '', message: '', tag: 'normal' });
+  const [noticeForm, setNoticeForm] = useState({
+    title: "",
+    message: "",
+    tag: "normal",
+  });
   const [showFineForm, setShowFineForm] = useState(false);
   const [editingFine, setEditingFine] = useState(null);
   const [teacherForm, setTeacherForm] = useState({
-    name: '', email: '', password: '', phone: '', address: '', qualification: '',
-    experience: '', specialization: '', otherDetails: '', role: 'teacher'
+    name: "",
+    email: "",
+    password: "",
+    phone: "",
+    address: "",
+    qualification: "",
+    experience: "",
+    specialization: "",
+    otherDetails: "",
+    role: "teacher",
   });
 
   useEffect(() => {
-    if (user?.role !== 'admin') {
-      navigate('/');
+    if (user?.role !== "admin") {
+      navigate("/");
       return;
     }
     fetchDashboardData();
   }, [user, navigate, activeTab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setSidebarOpen(true);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const searchStudentsForFee = async (query) => {
     if (!query || query.length < 2) {
@@ -132,10 +565,12 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}`);
+      const res = await axios.get(
+        `${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}`,
+      );
       setFeeSearchResults(res.data);
     } catch (error) {
-      console.error('Error searching students:', error);
+      console.error("Error searching students:", error);
       setFeeSearchResults([]);
     }
   };
@@ -146,10 +581,12 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/teachers/search?q=${encodeURIComponent(query)}`);
+      const res = await axios.get(
+        `${API_BASE_URL}/api/teachers/search?q=${encodeURIComponent(query)}`,
+      );
       setTeacherSearchResults(res.data);
     } catch (error) {
-      console.error('Error searching teachers:', error);
+      console.error("Error searching teachers:", error);
       setTeacherSearchResults([]);
     }
   };
@@ -160,61 +597,73 @@ const AdminDashboard = () => {
       return;
     }
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}`);
+      const res = await axios.get(
+        `${API_BASE_URL}/api/students/search?q=${encodeURIComponent(query)}`,
+      );
       setFineSearchResults(res.data);
     } catch (error) {
-      console.error('Error searching students:', error);
+      console.error("Error searching students:", error);
       setFineSearchResults([]);
     }
   };
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (activeTab === 'fees') {
+      if (activeTab === "fees") {
         searchStudentsForFee(feeStudentSearchQuery);
-      } else if (activeTab === 'classTeachers') {
+      } else if (activeTab === "classTeachers") {
         searchTeachers(teacherSearchQuery);
-      } else if (activeTab === 'fines') {
+      } else if (activeTab === "fines") {
         searchStudentsForFine(fineStudentSearchQuery);
       }
     }, 300);
     return () => clearTimeout(timeoutId);
-  }, [feeStudentSearchQuery, teacherSearchQuery, fineStudentSearchQuery, activeTab]);
+  }, [
+    feeStudentSearchQuery,
+    teacherSearchQuery,
+    fineStudentSearchQuery,
+    activeTab,
+  ]);
 
   // Fetch enrollment details when enrollment number changes (debounced)
   useEffect(() => {
     const fetchEnrollmentDetails = async () => {
-      if (!studentForm.enrollmentNumber || studentForm.enrollmentNumber.length === 0) {
+      if (
+        !studentForm.enrollmentNumber ||
+        studentForm.enrollmentNumber.length === 0
+      ) {
         setEnrollmentDetails(null);
         setEnrollmentLoading(false);
         return;
       }
-      
+
       setEnrollmentLoading(true);
       setEnrollmentDetails(null);
       try {
-        const res = await axios.get(`${API_BASE_URL}/api/enrollmentNumbers/details/${studentForm.enrollmentNumber}`);
+        const res = await axios.get(
+          `${API_BASE_URL}/api/enrollmentNumbers/details/${studentForm.enrollmentNumber}`,
+        );
         if (res.data) {
           setEnrollmentDetails(res.data);
           if (res.data.name) {
-            setStudentForm(prev => ({ ...prev, studentName: res.data.name }));
+            setStudentForm((prev) => ({ ...prev, studentName: res.data.name }));
           } else {
-            setStudentForm(prev => ({ ...prev, studentName: '' }));
+            setStudentForm((prev) => ({ ...prev, studentName: "" }));
           }
         } else {
           setEnrollmentDetails(null);
-          setStudentForm(prev => ({ ...prev, studentName: '' }));
+          setStudentForm((prev) => ({ ...prev, studentName: "" }));
         }
       } catch (error) {
         setEnrollmentDetails(null);
-        setStudentForm(prev => ({ ...prev, studentName: '' }));
+        setStudentForm((prev) => ({ ...prev, studentName: "" }));
       } finally {
         setEnrollmentLoading(false);
       }
     };
 
     const timeoutId = setTimeout(() => {
-      if (activeTab === 'students' && showStudentForm) {
+      if (activeTab === "students" && showStudentForm) {
         fetchEnrollmentDetails();
       }
     }, 500); // 500ms debounce
@@ -224,7 +673,22 @@ const AdminDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [usersRes, eventsRes, notificationsRes, contactsRes, carouselRes, galleryRes, studentsRes, classesRes, feesRes, finesRes, classTeachersRes, enrollmentNumbersRes, teachersRes, noticesRes] = await Promise.all([
+      const [
+        usersRes,
+        eventsRes,
+        notificationsRes,
+        contactsRes,
+        carouselRes,
+        galleryRes,
+        studentsRes,
+        classesRes,
+        feesRes,
+        finesRes,
+        classTeachersRes,
+        enrollmentNumbersRes,
+        teachersRes,
+        noticesRes,
+      ] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/users`),
         axios.get(`${API_BASE_URL}/api/events`),
         axios.get(`${API_BASE_URL}/api/notifications`),
@@ -238,9 +702,9 @@ const AdminDashboard = () => {
         axios.get(`${API_BASE_URL}/api/classTeachers`),
         axios.get(`${API_BASE_URL}/api/enrollmentNumbers`),
         axios.get(`${API_BASE_URL}/api/teachers`),
-        axios.get(`${API_BASE_URL}/api/notices`)
+        axios.get(`${API_BASE_URL}/api/notices`),
       ]);
-      
+
       setUsers(usersRes.data);
       setEvents(eventsRes.data);
       setNotifications(notificationsRes.data);
@@ -255,47 +719,51 @@ const AdminDashboard = () => {
       setEnrollmentNumbers(enrollmentNumbersRes.data);
       setTeachers(teachersRes.data);
       setNotices(noticesRes.data);
-      
+
       setStats({
         users: usersRes.data.length,
         events: eventsRes.data.length,
         notifications: notificationsRes.data.length,
         contacts: contactsRes.data.length,
-        students: studentsRes.data.length
+        students: studentsRes.data.length,
       });
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error("Error fetching data:", error);
     }
   };
 
   const fetchStudentsByClass = async (className) => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/fees/class/${className}`);
+      const res = await axios.get(
+        `${API_BASE_URL}/api/fees/class/${className}`,
+      );
       setClassStudents(res.data);
     } catch (error) {
-      console.error('Error fetching students by class:', error);
+      console.error("Error fetching students by class:", error);
       setClassStudents([]);
     }
   };
 
   const handleUpdateUserRole = async (userId, newRole) => {
     try {
-      await axios.put(`${API_BASE_URL}/api/users/${userId}/role`, { role: newRole });
+      await axios.put(`${API_BASE_URL}/api/users/${userId}/role`, {
+        role: newRole,
+      });
       fetchDashboardData();
     } catch (error) {
-      console.error('Error updating user role:', error);
-      alert('Error updating user role');
+      console.error("Error updating user role:", error);
+      alert("Error updating user role");
     }
   };
 
   const handleEditUser = (user) => {
     setEditingUser(user);
     setUserForm({
-      name: user.name || '',
-      email: user.email || '',
-      phone: user.phone || '',
-      address: user.address || '',
-      role: user.role || 'student'
+      name: user.name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      address: user.address || "",
+      role: user.role || "student",
     });
     setShowUserForm(true);
   };
@@ -304,18 +772,25 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingUser) {
-        await axios.put(`${API_BASE_URL}/api/users/${editingUser._id}`, userForm);
+        await axios.put(
+          `${API_BASE_URL}/api/users/${editingUser._id}`,
+          userForm,
+        );
         setEditingUser(null);
-        alert('User updated successfully!');
+        alert("User updated successfully!");
       }
       setShowUserForm(false);
       setUserForm({
-        name: '', email: '', phone: '', address: '', role: 'student'
+        name: "",
+        email: "",
+        phone: "",
+        address: "",
+        role: "student",
       });
       fetchDashboardData();
     } catch (error) {
-      console.error('Error updating user:', error);
-      alert(error.response?.data?.message || 'Error updating user');
+      console.error("Error updating user:", error);
+      alert(error.response?.data?.message || "Error updating user");
     }
   };
 
@@ -323,19 +798,22 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingEvent) {
-        await axios.put(`${API_BASE_URL}/api/events/${editingEvent._id}`, eventForm);
+        await axios.put(
+          `${API_BASE_URL}/api/events/${editingEvent._id}`,
+          eventForm,
+        );
         setEditingEvent(null);
-        alert('Event updated successfully!');
+        alert("Event updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/events`, eventForm);
-        alert('Event created successfully!');
+        alert("Event created successfully!");
       }
       setShowEventForm(false);
-      setEventForm({ title: '', description: '', date: '', location: '' });
+      setEventForm({ title: "", description: "", date: "", location: "" });
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating event:', error);
-      alert(error.response?.data?.message || 'Error saving event');
+      console.error("Error creating/updating event:", error);
+      alert(error.response?.data?.message || "Error saving event");
     }
   };
 
@@ -344,8 +822,8 @@ const AdminDashboard = () => {
     setEventForm({
       title: event.title,
       description: event.description,
-      date: event.date ? new Date(event.date).toISOString().split('T')[0] : '',
-      location: event.location || ''
+      date: event.date ? new Date(event.date).toISOString().split("T")[0] : "",
+      location: event.location || "",
     });
     setShowEventForm(true);
   };
@@ -354,19 +832,27 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingNotification) {
-        await axios.put(`${API_BASE_URL}/api/notifications/${editingNotification._id}`, notificationForm);
+        await axios.put(
+          `${API_BASE_URL}/api/notifications/${editingNotification._id}`,
+          notificationForm,
+        );
         setEditingNotification(null);
-        alert('Notification updated successfully!');
+        alert("Notification updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/notifications`, notificationForm);
-        alert('Notification sent successfully!');
+        alert("Notification sent successfully!");
       }
       setShowNotificationForm(false);
-      setNotificationForm({ title: '', message: '', type: 'general', targetRole: 'all' });
+      setNotificationForm({
+        title: "",
+        message: "",
+        type: "general",
+        targetRole: "all",
+      });
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating notification:', error);
-      alert(error.response?.data?.message || 'Error saving notification');
+      console.error("Error creating/updating notification:", error);
+      alert(error.response?.data?.message || "Error saving notification");
     }
   };
 
@@ -375,8 +861,8 @@ const AdminDashboard = () => {
     setNotificationForm({
       title: notification.title,
       message: notification.message,
-      type: notification.type || 'general',
-      targetRole: notification.targetRole || 'all'
+      type: notification.type || "general",
+      targetRole: notification.targetRole || "all",
     });
     setShowNotificationForm(true);
   };
@@ -385,32 +871,37 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingCarousel) {
-        await axios.put(`${API_BASE_URL}/api/carousel/${editingCarousel._id}`, carouselForm);
+        await axios.put(
+          `${API_BASE_URL}/api/carousel/${editingCarousel._id}`,
+          carouselForm,
+        );
         setEditingCarousel(null);
-        alert('Carousel image updated successfully!');
+        alert("Carousel image updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/carousel`, carouselForm);
-        alert('Carousel image uploaded successfully!');
+        alert("Carousel image uploaded successfully!");
       }
       setShowCarouselForm(false);
-      setCarouselForm({ image: '', title: '', description: '', order: 0 });
-      setImageUploadType('link');
+      setCarouselForm({ image: "", title: "", description: "", order: 0 });
+      setImageUploadType("link");
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating carousel:', error);
-      alert(error.response?.data?.message || 'Error saving carousel image');
+      console.error("Error creating/updating carousel:", error);
+      alert(error.response?.data?.message || "Error saving carousel image");
     }
   };
 
   const handleEditCarousel = (carousel) => {
     setEditingCarousel(carousel);
     setCarouselForm({
-      image: carousel.image || '',
-      title: carousel.title || '',
-      description: carousel.description || '',
-      order: carousel.order || 0
+      image: carousel.image || "",
+      title: carousel.title || "",
+      description: carousel.description || "",
+      order: carousel.order || 0,
     });
-    setImageUploadType(carousel.image && carousel.image.startsWith('data:') ? 'file' : 'link');
+    setImageUploadType(
+      carousel.image && carousel.image.startsWith("data:") ? "file" : "link",
+    );
     setShowCarouselForm(true);
   };
 
@@ -418,32 +909,42 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingGallery) {
-        await axios.put(`${API_BASE_URL}/api/gallery/${editingGallery._id}`, galleryForm);
+        await axios.put(
+          `${API_BASE_URL}/api/gallery/${editingGallery._id}`,
+          galleryForm,
+        );
         setEditingGallery(null);
-        alert('Gallery image updated successfully!');
+        alert("Gallery image updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/gallery`, galleryForm);
-        alert('Gallery image uploaded successfully!');
+        alert("Gallery image uploaded successfully!");
       }
       setShowGalleryForm(false);
-      setGalleryForm({ image: '', galleryName: '', title: '', description: '' });
-      setImageUploadType('link');
+      setGalleryForm({
+        image: "",
+        galleryName: "",
+        title: "",
+        description: "",
+      });
+      setImageUploadType("link");
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating gallery image:', error);
-      alert(error.response?.data?.message || 'Error saving gallery image');
+      console.error("Error creating/updating gallery image:", error);
+      alert(error.response?.data?.message || "Error saving gallery image");
     }
   };
 
   const handleEditGallery = (gallery) => {
     setEditingGallery(gallery);
     setGalleryForm({
-      image: gallery.image || '',
-      galleryName: gallery.galleryName || '',
-      title: gallery.title || '',
-      description: gallery.description || ''
+      image: gallery.image || "",
+      galleryName: gallery.galleryName || "",
+      title: gallery.title || "",
+      description: gallery.description || "",
     });
-    setImageUploadType(gallery.image && gallery.image.startsWith('data:') ? 'file' : 'link');
+    setImageUploadType(
+      gallery.image && gallery.image.startsWith("data:") ? "file" : "link",
+    );
     setShowGalleryForm(true);
   };
 
@@ -451,24 +952,39 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingStudent) {
-        await axios.put(`${API_BASE_URL}/api/students/${editingStudent._id}`, studentForm);
+        await axios.put(
+          `${API_BASE_URL}/api/students/${editingStudent._id}`,
+          studentForm,
+        );
         setEditingStudent(null);
-        alert('Student updated successfully!');
+        alert("Student updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/students`, studentForm);
-        alert('Student added successfully! Login ID: Mobile Number, Password: Enrollment Number');
+        alert(
+          "Student added successfully! Login ID: Mobile Number, Password: Enrollment Number",
+        );
       }
       setShowStudentForm(false);
       setStudentForm({
-        studentName: '', fathersName: '', mothersName: '', address: '', class: '',
-        rollNumber: '', enrollmentNumber: '', mobileNumber: '', studentType: 'dayScholar', busRoute: '', email: '', transportOpted: false
+        studentName: "",
+        fathersName: "",
+        mothersName: "",
+        address: "",
+        class: "",
+        rollNumber: "",
+        enrollmentNumber: "",
+        mobileNumber: "",
+        studentType: "dayScholar",
+        busRoute: "",
+        email: "",
+        transportOpted: false,
       });
       setEnrollmentDetails(null);
       setEnrollmentLoading(false);
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating student:', error);
-      alert(error.response?.data?.message || 'Error saving student');
+      console.error("Error creating/updating student:", error);
+      alert(error.response?.data?.message || "Error saving student");
     }
   };
 
@@ -476,20 +992,23 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingClassTeacher) {
-        await axios.put(`${API_BASE_URL}/api/classTeachers/${editingClassTeacher._id}`, classTeacherForm);
+        await axios.put(
+          `${API_BASE_URL}/api/classTeachers/${editingClassTeacher._id}`,
+          classTeacherForm,
+        );
         setEditingClassTeacher(null);
-        alert('Class teacher updated successfully!');
+        alert("Class teacher updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/classTeachers`, classTeacherForm);
-        alert('Class teacher assigned successfully!');
+        alert("Class teacher assigned successfully!");
       }
-      setClassTeacherForm({ teacherId: '', className: '', section: '' });
-      setTeacherSearchQuery('');
+      setClassTeacherForm({ teacherId: "", className: "", section: "" });
+      setTeacherSearchQuery("");
       setTeacherSearchResults([]);
       fetchDashboardData();
     } catch (error) {
-      console.error('Error assigning/updating class teacher:', error);
-      alert(error.response?.data?.message || 'Error saving class teacher');
+      console.error("Error assigning/updating class teacher:", error);
+      alert(error.response?.data?.message || "Error saving class teacher");
     }
   };
 
@@ -498,7 +1017,7 @@ const AdminDashboard = () => {
     setClassTeacherForm({
       teacherId: classTeacher.teacherId._id || classTeacher.teacherId,
       className: classTeacher.className,
-      section: classTeacher.section || ''
+      section: classTeacher.section || "",
     });
   };
 
@@ -506,18 +1025,24 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingEnrollment) {
-        await axios.put(`${API_BASE_URL}/api/enrollmentNumbers/${editingEnrollment._id}`, enrollmentForm);
+        await axios.put(
+          `${API_BASE_URL}/api/enrollmentNumbers/${editingEnrollment._id}`,
+          enrollmentForm,
+        );
         setEditingEnrollment(null);
-        alert('Enrollment number updated successfully!');
+        alert("Enrollment number updated successfully!");
       } else {
-        await axios.post(`${API_BASE_URL}/api/enrollmentNumbers`, enrollmentForm);
-        alert('Enrollment number added successfully!');
+        await axios.post(
+          `${API_BASE_URL}/api/enrollmentNumbers`,
+          enrollmentForm,
+        );
+        alert("Enrollment number added successfully!");
       }
-      setEnrollmentForm({ enrollmentNumber: '', name: '' });
+      setEnrollmentForm({ enrollmentNumber: "", name: "" });
       fetchDashboardData();
     } catch (error) {
-      console.error('Error adding/updating enrollment number:', error);
-      alert(error.response?.data?.message || 'Error saving enrollment number');
+      console.error("Error adding/updating enrollment number:", error);
+      alert(error.response?.data?.message || "Error saving enrollment number");
     }
   };
 
@@ -525,7 +1050,7 @@ const AdminDashboard = () => {
     setEditingEnrollment(enrollment);
     setEnrollmentForm({
       enrollmentNumber: enrollment.enrollmentNumber,
-      name: enrollment.name
+      name: enrollment.name,
     });
   };
 
@@ -534,7 +1059,9 @@ const AdminDashboard = () => {
     setEnrollmentDetails(null); // Clear enrollment details when editing
     // Fetch user email
     try {
-      const userRes = await axios.get(`${API_BASE_URL}/api/users/${student.userId._id || student.userId}`);
+      const userRes = await axios.get(
+        `${API_BASE_URL}/api/users/${student.userId._id || student.userId}`,
+      );
       setStudentForm({
         studentName: student.studentName,
         fathersName: student.fathersName,
@@ -544,10 +1071,10 @@ const AdminDashboard = () => {
         rollNumber: student.rollNumber,
         enrollmentNumber: student.enrollmentNumber,
         mobileNumber: student.mobileNumber,
-        studentType: student.studentType || 'dayScholar',
-        busRoute: student.busRoute || '',
-        email: userRes.data.email || '',
-        transportOpted: student.transportOpted || false
+        studentType: student.studentType || "dayScholar",
+        busRoute: student.busRoute || "",
+        email: userRes.data.email || "",
+        transportOpted: student.transportOpted || false,
       });
     } catch (error) {
       setStudentForm({
@@ -559,10 +1086,10 @@ const AdminDashboard = () => {
         rollNumber: student.rollNumber,
         enrollmentNumber: student.enrollmentNumber,
         mobileNumber: student.mobileNumber,
-        studentType: student.studentType || 'dayScholar',
-        busRoute: student.busRoute || '',
-        email: '',
-        transportOpted: student.transportOpted || false
+        studentType: student.studentType || "dayScholar",
+        busRoute: student.busRoute || "",
+        email: "",
+        transportOpted: student.transportOpted || false,
       });
     }
     setShowStudentForm(true);
@@ -572,19 +1099,22 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingClass) {
-        await axios.put(`${API_BASE_URL}/api/classes/${editingClass._id}`, classForm);
+        await axios.put(
+          `${API_BASE_URL}/api/classes/${editingClass._id}`,
+          classForm,
+        );
         setEditingClass(null);
-        alert('Class updated successfully!');
+        alert("Class updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/classes`, classForm);
-        alert('Class created successfully!');
+        alert("Class created successfully!");
       }
       setShowClassForm(false);
-      setClassForm({ className: '', section: '', description: '' });
+      setClassForm({ className: "", section: "", description: "" });
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating class:', error);
-      alert(error.response?.data?.message || 'Error saving class');
+      console.error("Error creating/updating class:", error);
+      alert(error.response?.data?.message || "Error saving class");
     }
   };
 
@@ -592,8 +1122,8 @@ const AdminDashboard = () => {
     setEditingClass(classItem);
     setClassForm({
       className: classItem.className,
-      section: classItem.section || '',
-      description: classItem.description || ''
+      section: classItem.section || "",
+      description: classItem.description || "",
     });
     setShowClassForm(true);
   };
@@ -609,20 +1139,26 @@ const AdminDashboard = () => {
         installmentNumber: feeForm.installmentNumber,
         dueDate: feeForm.dueDate,
         remarks: feeForm.remarks,
-        feeCategory: feeForm.feeCategory
+        feeCategory: feeForm.feeCategory,
       };
-      
+
       if (editingFee) {
         await axios.put(`${API_BASE_URL}/api/fees/${editingFee._id}`, feeData);
         setEditingFee(null);
-        alert('Fee updated successfully!');
+        alert("Fee updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/fees`, feeData);
-        
+
         // If transport fee is provided and student opted for transport, create transport fee
-        if (feeForm.feeCategory === 'regular' && feeForm.transportAmount) {
-          const selectedStudent = students.find(s => s._id.toString() === feeForm.selectedStudent);
-          if (selectedStudent && selectedStudent.studentType === 'dayScholar' && selectedStudent.transportOpted) {
+        if (feeForm.feeCategory === "regular" && feeForm.transportAmount) {
+          const selectedStudent = students.find(
+            (s) => s._id.toString() === feeForm.selectedStudent,
+          );
+          if (
+            selectedStudent &&
+            selectedStudent.studentType === "dayScholar" &&
+            selectedStudent.transportOpted
+          ) {
             await axios.post(`${API_BASE_URL}/api/fees`, {
               studentId: feeForm.selectedStudent,
               amount: feeForm.transportAmount,
@@ -630,43 +1166,58 @@ const AdminDashboard = () => {
               month: feeForm.month,
               installmentNumber: feeForm.installmentNumber,
               dueDate: feeForm.dueDate,
-              remarks: 'Transport Fee',
-              feeCategory: 'transport'
+              remarks: "Transport Fee",
+              feeCategory: "transport",
             });
           }
         }
-        alert('Fee added successfully!');
+        alert("Fee added successfully!");
       }
       setShowFeeForm(false);
       setFeeForm({
-        selectedClass: '', selectedStudent: '', studentName: '', amount: '', feesType: 'monthly',
-        month: '', installmentNumber: '', dueDate: '', remarks: '', feeCategory: 'regular', transportAmount: ''
+        selectedClass: "",
+        selectedStudent: "",
+        studentName: "",
+        amount: "",
+        feesType: "monthly",
+        month: "",
+        installmentNumber: "",
+        dueDate: "",
+        remarks: "",
+        feeCategory: "regular",
+        transportAmount: "",
       });
       setClassStudents([]);
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating fee:', error);
-      alert(error.response?.data?.message || 'Error saving fee');
+      console.error("Error creating/updating fee:", error);
+      alert(error.response?.data?.message || "Error saving fee");
     }
   };
 
   const handleEditFee = (fee) => {
     setEditingFee(fee);
     // Find student to get class
-    const student = students.find(s => s._id.toString() === fee.studentId._id?.toString() || s._id.toString() === fee.studentId.toString());
+    const student = students.find(
+      (s) =>
+        s._id.toString() === fee.studentId._id?.toString() ||
+        s._id.toString() === fee.studentId.toString(),
+    );
     if (student) {
       setFeeForm({
         selectedClass: student.class,
         selectedStudent: student._id,
         studentName: student.studentName,
         amount: fee.amount,
-        feesType: fee.feesType || 'monthly',
-        month: fee.month || '',
-        installmentNumber: fee.installmentNumber || '',
-        dueDate: fee.dueDate ? new Date(fee.dueDate).toISOString().split('T')[0] : '',
-        remarks: fee.remarks || '',
-        feeCategory: fee.feeCategory || 'regular',
-        transportAmount: ''
+        feesType: fee.feesType || "monthly",
+        month: fee.month || "",
+        installmentNumber: fee.installmentNumber || "",
+        dueDate: fee.dueDate
+          ? new Date(fee.dueDate).toISOString().split("T")[0]
+          : "",
+        remarks: fee.remarks || "",
+        feeCategory: fee.feeCategory || "regular",
+        transportAmount: "",
       });
       fetchStudentsByClass(student.class);
     }
@@ -677,29 +1228,40 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const submitData = { ...teacherForm };
-      
+
       // Don't send password if editing and password is empty
       if (editingTeacher && !submitData.password) {
         delete submitData.password;
       }
-      
+
       if (editingTeacher) {
-        await axios.put(`${API_BASE_URL}/api/teachers/${editingTeacher._id}`, submitData);
+        await axios.put(
+          `${API_BASE_URL}/api/teachers/${editingTeacher._id}`,
+          submitData,
+        );
         setEditingTeacher(null);
-        alert('Teacher/Accountant updated successfully!');
+        alert("Teacher/Accountant updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/teachers`, submitData);
-        alert('Teacher/Accountant added successfully!');
+        alert("Teacher/Accountant added successfully!");
       }
       setShowTeacherForm(false);
       setTeacherForm({
-        name: '', email: '', password: '', phone: '', address: '', qualification: '',
-        experience: '', specialization: '', otherDetails: '', role: 'teacher'
+        name: "",
+        email: "",
+        password: "",
+        phone: "",
+        address: "",
+        qualification: "",
+        experience: "",
+        specialization: "",
+        otherDetails: "",
+        role: "teacher",
       });
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating teacher:', error);
-      alert(error.response?.data?.message || 'Error saving teacher/accountant');
+      console.error("Error creating/updating teacher:", error);
+      alert(error.response?.data?.message || "Error saving teacher/accountant");
     }
   };
 
@@ -708,36 +1270,36 @@ const AdminDashboard = () => {
     setTeacherForm({
       name: teacher.name,
       email: teacher.email,
-      password: '', // Don't show password
-      phone: teacher.phone || '',
-      address: teacher.address || '',
-      qualification: teacher.qualification || '',
-      experience: teacher.experience || '',
-      specialization: teacher.specialization || '',
-      otherDetails: teacher.otherDetails || '',
-      role: teacher.role
+      password: "", // Don't show password
+      phone: teacher.phone || "",
+      address: teacher.address || "",
+      qualification: teacher.qualification || "",
+      experience: teacher.experience || "",
+      specialization: teacher.specialization || "",
+      otherDetails: teacher.otherDetails || "",
+      role: teacher.role,
     });
     setShowTeacherForm(true);
   };
 
   const handleSubmitFine = async (e) => {
     e.preventDefault();
-    
+
     // Validate form
     if (!fineForm.selectedStudent) {
-      alert('Please select a student');
+      alert("Please select a student");
       return;
     }
     if (!fineForm.amount || parseFloat(fineForm.amount) <= 0) {
-      alert('Please enter a valid fine amount');
+      alert("Please enter a valid fine amount");
       return;
     }
-    if (!fineForm.reason || fineForm.reason.trim() === '') {
-      alert('Please enter a reason for the fine');
+    if (!fineForm.reason || fineForm.reason.trim() === "") {
+      alert("Please enter a reason for the fine");
       return;
     }
     if (!fineForm.dueDate) {
-      alert('Please select a due date');
+      alert("Please select a due date");
       return;
     }
 
@@ -748,46 +1310,63 @@ const AdminDashboard = () => {
         amount: parseFloat(fineForm.amount),
         reason: fineForm.reason.trim(),
         dueDate: fineForm.dueDate,
-        remarks: fineForm.remarks || '',
-        fineType: fineForm.fineType || 'other'
+        remarks: fineForm.remarks || "",
+        fineType: fineForm.fineType || "other",
       };
 
       if (editingFine) {
-        await axios.put(`${API_BASE_URL}/api/fines/${editingFine._id}`, fineData);
+        await axios.put(
+          `${API_BASE_URL}/api/fines/${editingFine._id}`,
+          fineData,
+        );
         setEditingFine(null);
-        alert('Fine updated successfully!');
+        alert("Fine updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/fines`, fineData);
-        alert('Fine added successfully!');
+        alert("Fine added successfully!");
       }
       setShowFineForm(false);
       setFineForm({
-        selectedStudent: '', studentName: '', amount: '', reason: '', dueDate: '', remarks: '', fineType: 'other'
+        selectedStudent: "",
+        studentName: "",
+        amount: "",
+        reason: "",
+        dueDate: "",
+        remarks: "",
+        fineType: "other",
       });
-      setFineStudentSearchQuery('');
+      setFineStudentSearchQuery("");
       setFineSearchResults([]);
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating fine:', error);
-      const errorMessage = error.response?.data?.message || 'Error saving fine';
+      console.error("Error creating/updating fine:", error);
+      const errorMessage = error.response?.data?.message || "Error saving fine";
       alert(errorMessage);
     }
   };
 
   const handleEditFine = (fine) => {
     setEditingFine(fine);
-    const student = students.find(s => s._id.toString() === fine.studentId._id?.toString() || s._id.toString() === fine.studentId.toString());
+    const student = students.find(
+      (s) =>
+        s._id.toString() === fine.studentId._id?.toString() ||
+        s._id.toString() === fine.studentId.toString(),
+    );
     setFineForm({
-      selectedStudent: student?._id || '',
-      studentName: student?.studentName || fine.studentId?.studentName || '',
+      selectedStudent: student?._id || "",
+      studentName: student?.studentName || fine.studentId?.studentName || "",
       amount: fine.amount,
       reason: fine.reason,
-      fineType: fine.fineType || 'other',
-      dueDate: fine.dueDate ? new Date(fine.dueDate).toISOString().split('T')[0] : '',
-      remarks: fine.remarks || ''
+      fineType: fine.fineType || "other",
+      dueDate: fine.dueDate
+        ? new Date(fine.dueDate).toISOString().split("T")[0]
+        : "",
+      remarks: fine.remarks || "",
     });
     if (student) {
-      setFineStudentSearchQuery(`${student.rollNumber || 'N/A'} / ${student.enrollmentNumber} - ${student.studentName}`);
+      setFineStudentSearchQuery(
+        `${student.rollNumber || "N/A"} / ${student.enrollmentNumber} - ${student.studentName}`,
+      );
     }
     setShowFineForm(true);
   };
@@ -796,19 +1375,22 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       if (editingNotice) {
-        await axios.put(`${API_BASE_URL}/api/notices/${editingNotice._id}`, noticeForm);
+        await axios.put(
+          `${API_BASE_URL}/api/notices/${editingNotice._id}`,
+          noticeForm,
+        );
         setEditingNotice(null);
-        alert('Notice updated successfully!');
+        alert("Notice updated successfully!");
       } else {
         await axios.post(`${API_BASE_URL}/api/notices`, noticeForm);
-        alert('Notice added successfully!');
+        alert("Notice added successfully!");
       }
       setShowNoticeForm(false);
-      setNoticeForm({ title: '', message: '', tag: 'normal' });
+      setNoticeForm({ title: "", message: "", tag: "normal" });
       fetchDashboardData();
     } catch (error) {
-      console.error('Error creating/updating notice:', error);
-      alert(error.response?.data?.message || 'Error saving notice');
+      console.error("Error creating/updating notice:", error);
+      alert(error.response?.data?.message || "Error saving notice");
     }
   };
 
@@ -817,7 +1399,7 @@ const AdminDashboard = () => {
     setNoticeForm({
       title: notice.title,
       message: notice.message,
-      tag: notice.tag || 'normal'
+      tag: notice.tag || "normal",
     });
     setShowNoticeForm(true);
   };
@@ -828,9 +1410,9 @@ const AdminDashboard = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result;
-        if (formType === 'carousel') {
+        if (formType === "carousel") {
           setCarouselForm({ ...carouselForm, image: base64String });
-        } else if (formType === 'gallery') {
+        } else if (formType === "gallery") {
           setGalleryForm({ ...galleryForm, image: base64String });
         }
       };
@@ -839,7 +1421,7 @@ const AdminDashboard = () => {
   };
 
   const handleDelete = async (type, id) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
+    if (!window.confirm("Are you sure you want to delete this item?")) return;
     try {
       const endpoints = {
         event: `/api/events/${id}`,
@@ -854,47 +1436,577 @@ const AdminDashboard = () => {
         classTeacher: `/api/classTeachers/${id}`,
         enrollmentNumber: `/api/enrollmentNumbers/${id}`,
         teacher: `/api/teachers/${id}`,
-        notice: `/api/notices/${id}`
+        notice: `/api/notices/${id}`,
       };
       await axios.delete(`${API_BASE_URL}${endpoints[type]}`);
       fetchDashboardData();
     } catch (error) {
-      console.error('Error deleting:', error);
+      console.error("Error deleting:", error);
     }
   };
 
+  const attendanceMonthStart = new Date(attendanceYear, attendanceMonth - 1, 1);
+  const attendanceMonthEnd = new Date(attendanceYear, attendanceMonth, 0);
+  const attendanceMonthDays = attendanceMonthEnd.getDate();
+  const attendanceMonthFirstDay = attendanceMonthStart.getDay();
+  const attendanceCalendarCells = [];
+  for (let i = 0; i < attendanceMonthFirstDay; i += 1) {
+    attendanceCalendarCells.push(null);
+  }
+  for (let day = 1; day <= attendanceMonthDays; day += 1) {
+    attendanceCalendarCells.push(day);
+  }
+  const attendanceStudentStatusByDate = attendanceStudentMonthRecords.reduce(
+    (acc, record) => {
+      const dateKey = toDateKeyYMD(record.date);
+      acc[dateKey] = record.status;
+      return acc;
+    },
+    {},
+  );
+  const sundayEnabledOverrideDateSet = new Set(
+    attendanceHolidays
+      .filter((holiday) => isSundayAttendanceOverride(holiday))
+      .map((holiday) => toDateKeyYMD(holiday.date))
+      .filter(Boolean),
+  );
+  const nonOverrideAttendanceHolidays = attendanceHolidays.filter(
+    (holiday) => !isSundayAttendanceOverride(holiday),
+  );
+  const attendanceHolidayMap = nonOverrideAttendanceHolidays.reduce((acc, holiday) => {
+    acc[toDateKeyYMD(holiday.date)] = holiday;
+    return acc;
+  }, {});
+
+  const virtualSundayHolidays = [];
+  for (let day = 1; day <= attendanceMonthDays; day += 1) {
+    const dateObj = new Date(attendanceYear, attendanceMonth - 1, day);
+    if (dateObj.getDay() !== 0) continue;
+    const dateKey = `${attendanceYear}-${String(attendanceMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (sundayEnabledOverrideDateSet.has(dateKey)) continue;
+    if (attendanceHolidayMap[dateKey]) continue;
+    virtualSundayHolidays.push({
+      _id: `sunday-${dateKey}`,
+      title: "Sunday Off",
+      date: dateKey,
+      description: "Weekly off (automatic)",
+      isWeeklyOff: true,
+    });
+  }
+  const attendanceHolidaysForDisplay = [
+    ...nonOverrideAttendanceHolidays.map((h) => ({ ...h, isWeeklyOff: false })),
+    ...virtualSundayHolidays,
+  ].sort(
+    (a, b) =>
+      new Date(toDateKeyYMD(a.date)).getTime() -
+      new Date(toDateKeyYMD(b.date)).getTime(),
+  );
+
+  const attendanceCalendarHolidayMap = { ...attendanceHolidayMap };
+  for (let day = 1; day <= attendanceMonthDays; day += 1) {
+    const dateObj = new Date(attendanceYear, attendanceMonth - 1, day);
+    if (dateObj.getDay() !== 0) continue;
+    const dateKey = `${attendanceYear}-${String(attendanceMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (sundayEnabledOverrideDateSet.has(dateKey)) continue;
+    if (!attendanceCalendarHolidayMap[dateKey]) {
+      attendanceCalendarHolidayMap[dateKey] = {
+        _id: `sunday-${dateKey}`,
+        title: "Sunday Off",
+        date: dateKey,
+        isWeeklyOff: true,
+      };
+    }
+  }
+  const attendanceStudentCards = Object.values(
+    attendanceData.reduce((acc, record) => {
+      const recordDateKey = toDateKeyYMD(record.date);
+      if (attendanceCalendarHolidayMap[recordDateKey]) return acc;
+      const studentId =
+        typeof record.student === "object" ? record.student?._id : record.student;
+      if (!studentId) return acc;
+      if (!acc[studentId]) {
+        const fallbackStudent = students.find((s) => s._id === studentId);
+        acc[studentId] = {
+          _id: studentId,
+          studentName:
+            record.student?.studentName ||
+            fallbackStudent?.studentName ||
+            "Unknown Student",
+          rollNumber:
+            record.student?.rollNumber || fallbackStudent?.rollNumber || "",
+          class: record.student?.class || fallbackStudent?.class || "",
+          presentCount: 0,
+          absentCount: 0,
+        };
+      }
+      if (record.status === "Present") acc[studentId].presentCount += 1;
+      if (record.status === "Absent") acc[studentId].absentCount += 1;
+      return acc;
+    }, {}),
+  )
+    .map((studentCard) => {
+      const workingDays = studentCard.presentCount + studentCard.absentCount;
+      const attendancePercent =
+        workingDays > 0
+          ? Math.round((studentCard.presentCount / workingDays) * 1000) / 10
+          : null;
+      return {
+        ...studentCard,
+        workingDays,
+        attendancePercent,
+      };
+    })
+    .sort((a, b) =>
+    (a.rollNumber || "").localeCompare(b.rollNumber || "", undefined, {
+      numeric: true,
+    }),
+  );
+
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard':
+      case "attendance":
         return (
           <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">Dashboard Overview</h2>
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              Attendance
+            </h2>
+            <form
+              className="flex flex-wrap gap-4 items-end mb-6"
+              onSubmit={handleAttendanceFetch}
+            >
+              <div>
+                <label className="block mb-1 text-sm">Class</label>
+                <select
+                  className="border rounded px-3 py-2"
+                  value={attendanceClass}
+                  onChange={(e) => setAttendanceClass(e.target.value)}
+                  required
+                >
+                  <option value="">Select Class</option>
+                  {classes.map((cls) => (
+                    <option key={cls._id} value={cls._id}>
+                      {cls.className} {cls.section}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block mb-1 text-sm">Month</label>
+                <select
+                  className="border rounded px-3 py-2"
+                  value={attendanceMonth}
+                  onChange={(e) => setAttendanceMonth(Number(e.target.value))}
+                  required
+                >
+                  {[...Array(12)].map((_, i) => (
+                    <option key={i + 1} value={i + 1}>
+                      {new Date(0, i).toLocaleString("default", {
+                        month: "long",
+                      })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block mb-1 text-sm">Year</label>
+                <input
+                  type="number"
+                  className="border rounded px-3 py-2 w-24"
+                  value={attendanceYear}
+                  onChange={(e) => setAttendanceYear(Number(e.target.value))}
+                  min="2000"
+                  max={new Date().getFullYear()}
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                className="bg-primary text-white px-4 py-2 rounded hover:bg-primary-700"
+              >
+                Fetch Attendance
+              </button>
+            </form>
+
+            <div className="bg-neutral-2 rounded-lg shadow-md p-4 mb-6">
+              <h3 className="text-lg font-semibold text-neutral-3 mb-3">
+                Holidays (Simple)
+              </h3>
+              <form
+                onSubmit={handleAddHoliday}
+                className="flex flex-wrap gap-3 items-end mb-4"
+              >
+                <div>
+                  <label className="block mb-1 text-sm">Date</label>
+                  <input
+                    type="date"
+                    className="border rounded px-3 py-2"
+                    value={holidayForm.date}
+                    onChange={(e) =>
+                      setHolidayForm((prev) => ({ ...prev, date: e.target.value }))
+                    }
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1 text-sm">Title</label>
+                  <input
+                    type="text"
+                    className="border rounded px-3 py-2"
+                    placeholder="e.g. Republic Day"
+                    value={holidayForm.title}
+                    onChange={(e) =>
+                      setHolidayForm((prev) => ({ ...prev, title: e.target.value }))
+                    }
+                    required
+                  />
+                </div>
+                <div className="min-w-[220px]">
+                  <label className="block mb-1 text-sm">Description</label>
+                  <input
+                    type="text"
+                    className="border rounded px-3 py-2 w-full"
+                    placeholder="Optional"
+                    value={holidayForm.description}
+                    onChange={(e) =>
+                      setHolidayForm((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={holidayActionLoading}
+                  className="bg-primary text-white px-4 py-2 rounded hover:bg-primary-700 disabled:opacity-60"
+                >
+                  Add Holiday
+                </button>
+              </form>
+
+              <p className="text-sm text-neutral-3/70 mb-3">
+                Sunday Off is added automatically for every Sunday in the
+                selected month. Toggle Sunday to allow/disable attendance for
+                that date.
+              </p>
+              {attendanceHolidaysForDisplay.length === 0 ? (
+                <p className="text-sm text-neutral-3/70">
+                  No holidays to show for this month.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {attendanceHolidaysForDisplay.map((holiday) => (
+                    <div
+                      key={holiday._id}
+                      className={`border rounded-lg p-3 flex items-start justify-between gap-3 ${
+                        holiday.isWeeklyOff
+                          ? "border-slate-200 bg-slate-50"
+                          : "border-amber-200 bg-amber-50"
+                      }`}
+                    >
+                      <div>
+                        <p
+                          className={`font-semibold ${
+                            holiday.isWeeklyOff
+                              ? "text-slate-800"
+                              : "text-amber-900"
+                          }`}
+                        >
+                          {holiday.title}
+                          {holiday.isWeeklyOff && (
+                            <span className="ml-2 text-xs font-normal text-slate-500">
+                              (auto)
+                            </span>
+                          )}
+                        </p>
+                        <p
+                          className={`text-xs ${
+                            holiday.isWeeklyOff
+                              ? "text-slate-600"
+                              : "text-amber-700"
+                          }`}
+                        >
+                          {formatDateDDMMYYYY(holiday.date)}
+                        </p>
+                        {holiday.description && (
+                          <p
+                            className={`text-xs mt-1 ${
+                              holiday.isWeeklyOff
+                                ? "text-slate-600"
+                                : "text-amber-800"
+                            }`}
+                          >
+                            {holiday.description}
+                          </p>
+                        )}
+                      </div>
+                      {!holiday.isWeeklyOff && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteHoliday(holiday._id)}
+                          disabled={holidayActionLoading}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-60"
+                          title="Delete holiday"
+                        >
+                          <FiTrash2 />
+                        </button>
+                      )}
+                      {holiday.isWeeklyOff && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleSundayWorking(toDateKeyYMD(holiday.date))
+                          }
+                          disabled={holidayActionLoading}
+                          className="text-red-600 hover:text-red-700"
+                          title="Toggle Sunday attendance"
+                        >
+                          {sundayEnabledOverrideDateSet.has(toDateKeyYMD(holiday.date))
+                            ? "Off"
+                            : "On"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {attendanceLoading && <p>Loading attendance data...</p>}
+            {attendanceError && (
+              <p className="text-red-500">{attendanceError}</p>
+            )}
+            {attendanceData.length > 0 ? (
+              <div className="bg-neutral-2 rounded-lg shadow-md p-4">
+                <h3 className="text-lg font-semibold text-neutral-3 mb-3">
+                  Step 2: Select Student
+                </h3>
+                <div className="mb-4 flex flex-wrap gap-3 items-end">
+                  <div>
+                    <label className="block mb-1 text-sm">Date</label>
+                    <input
+                      type="date"
+                      className="border rounded px-3 py-2"
+                      value={attendanceDateInput}
+                      onChange={(e) => setAttendanceDateInput(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 text-sm">Find by Roll Number</label>
+                    <input
+                      type="text"
+                      className="border rounded px-3 py-2"
+                      placeholder="e.g. 12"
+                      value={attendanceRollNumber}
+                      onChange={(e) => setAttendanceRollNumber(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleFindAttendanceStudentByRoll}
+                    className="bg-secondary text-white px-4 py-2 rounded hover:bg-secondary-700"
+                  >
+                    Find
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {attendanceStudentCards.map((studentCard) => (
+                    <button
+                      key={studentCard._id}
+                      type="button"
+                      onClick={() =>
+                        selectAttendanceStudentFromMonthRecords(
+                          {
+                            _id: studentCard._id,
+                            studentName: studentCard.studentName,
+                            rollNumber: studentCard.rollNumber,
+                            class: studentCard.class,
+                          },
+                          attendanceData,
+                        )
+                      }
+                      className={`border rounded-lg p-3 text-left transition ${
+                        attendanceStudentResult?._id === studentCard._id
+                          ? "border-primary bg-primary/5"
+                          : "border-neutral-1 hover:border-primary"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-neutral-3">
+                        {studentCard.studentName}
+                      </p>
+                      <p className="text-sm text-neutral-3/70">
+                        Roll No: {studentCard.rollNumber || "-"}
+                      </p>
+                      <p className="text-sm text-neutral-3/70">
+                        Present: {studentCard.presentCount} | Absent:{" "}
+                        {studentCard.absentCount}
+                      </p>
+                      <p className="text-sm text-neutral-3/70">
+                        Attendance:{" "}
+                        {studentCard.attendancePercent != null
+                          ? `${studentCard.attendancePercent}%`
+                          : "-"}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+
+                {attendanceStudentResult && (
+                  <div className="mt-6 border border-neutral-1 rounded-lg p-4">
+                    <p className="text-sm text-neutral-3">
+                      <span className="font-semibold">Student:</span>{" "}
+                      {attendanceStudentResult.studentName} |{" "}
+                      <span className="font-semibold">Roll No:</span>{" "}
+                      {attendanceStudentResult.rollNumber || "-"}
+                    </p>
+                    <p className="mt-2 text-sm text-neutral-3/80">
+                      <span className="font-semibold">Status on selected date:</span>{" "}
+                      {attendanceCalendarHolidayMap[attendanceDateInput]
+                        ? `Holiday (${attendanceCalendarHolidayMap[attendanceDateInput].title})`
+                        : attendanceSelectedStatus || "Not marked"}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleMarkSingleAttendance("Present")}
+                        disabled={attendanceActionLoading}
+                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-60"
+                      >
+                        Mark Present
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkSingleAttendance("Absent")}
+                        disabled={attendanceActionLoading}
+                        className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-60"
+                      >
+                        Mark Absent
+                      </button>
+                    </div>
+
+                    <div className="mt-5 border border-neutral-1 rounded-lg p-4">
+                      <p className="text-sm font-semibold text-neutral-3 mb-3">
+                        Monthly Calendar (
+                        {new Date(
+                          attendanceYear,
+                          attendanceMonth - 1,
+                          1,
+                        ).toLocaleString("default", {
+                          month: "long",
+                        })}{" "}
+                        {attendanceYear})
+                      </p>
+                      <div className="grid grid-cols-7 gap-2 mb-2 text-xs font-semibold text-neutral-3/60">
+                        <div className="text-center">Sun</div>
+                        <div className="text-center">Mon</div>
+                        <div className="text-center">Tue</div>
+                        <div className="text-center">Wed</div>
+                        <div className="text-center">Thu</div>
+                        <div className="text-center">Fri</div>
+                        <div className="text-center">Sat</div>
+                      </div>
+                      <div className="grid grid-cols-7 gap-2">
+                        {attendanceCalendarCells.map((day, index) => {
+                          if (!day) {
+                            return (
+                              <div
+                                key={`empty-${index}`}
+                                className="h-16 rounded border border-transparent"
+                              />
+                            );
+                          }
+                          const dateKey = `${attendanceYear}-${String(
+                            attendanceMonth,
+                          ).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                          const status = attendanceStudentStatusByDate[dateKey];
+                          const holiday = attendanceCalendarHolidayMap[dateKey];
+                          return (
+                            <div
+                              key={dateKey}
+                              className={`h-16 rounded border p-2 text-xs ${
+                                holiday
+                                  ? "bg-amber-50 border-amber-200"
+                                  : status === "Present"
+                                  ? "bg-green-50 border-green-200"
+                                  : status === "Absent"
+                                    ? "bg-red-50 border-red-200"
+                                    : "bg-white border-neutral-1"
+                              }`}
+                            >
+                              <p className="font-semibold text-neutral-3">{day}</p>
+                              {holiday && (
+                                <p className="mt-1 text-amber-700 truncate">
+                                  Holiday
+                                </p>
+                              )}
+                              {status && (
+                                <p
+                                  className={`mt-1 ${
+                                    status === "Present"
+                                      ? "text-green-700"
+                                      : "text-red-700"
+                                  }`}
+                                >
+                                  {status}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              !attendanceLoading && (
+                <p>No attendance data found for selected class and month.</p>
+              )
+            )}
+          </div>
+        );
+      case "dashboard":
+        return (
+          <div>
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              Dashboard Overview
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
               <div className="bg-neutral-2 rounded-lg shadow-md p-6">
                 <p className="text-neutral-3/70 text-sm">Total Users</p>
-                <p className="text-3xl font-bold text-neutral-3">{stats.users}</p>
+                <p className="text-3xl font-bold text-neutral-3">
+                  {stats.users}
+                </p>
               </div>
               <div className="bg-neutral-2 rounded-lg shadow-md p-6">
                 <p className="text-neutral-3/70 text-sm">Events</p>
-                <p className="text-3xl font-bold text-neutral-3">{stats.events}</p>
+                <p className="text-3xl font-bold text-neutral-3">
+                  {stats.events}
+                </p>
               </div>
               <div className="bg-neutral-2 rounded-lg shadow-md p-6">
                 <p className="text-neutral-3/70 text-sm">Notifications</p>
-                <p className="text-3xl font-bold text-neutral-3">{stats.notifications}</p>
+                <p className="text-3xl font-bold text-neutral-3">
+                  {stats.notifications}
+                </p>
               </div>
               <div className="bg-neutral-2 rounded-lg shadow-md p-6">
                 <p className="text-neutral-3/70 text-sm">Contact Queries</p>
-                <p className="text-3xl font-bold text-neutral-3">{stats.contacts}</p>
+                <p className="text-3xl font-bold text-neutral-3">
+                  {stats.contacts}
+                </p>
               </div>
               <div className="bg-neutral-2 rounded-lg shadow-md p-6">
                 <p className="text-neutral-3/70 text-sm">Students</p>
-                <p className="text-3xl font-bold text-neutral-3">{stats.students}</p>
+                <p className="text-3xl font-bold text-neutral-3">
+                  {stats.students}
+                </p>
               </div>
             </div>
           </div>
         );
 
-      case 'users':
+      case "users":
         const filteredUsers = users.filter((u) => {
           // Filter by role
           if (userFilters.role && u.role !== userFilters.role) {
@@ -916,18 +2028,26 @@ const AdminDashboard = () => {
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-neutral-3">Manage Users</h2>
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Manage Users
+              </h2>
             </div>
 
             {/* Filter Options */}
             <div className="bg-neutral-2 rounded-lg shadow-md p-6 mb-6">
-              <h3 className="text-lg font-semibold text-neutral-3 mb-4">Filter Users</h3>
+              <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                Filter Users
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Filter by Role</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Filter by Role
+                  </label>
                   <select
                     value={userFilters.role}
-                    onChange={(e) => setUserFilters({...userFilters, role: e.target.value})}
+                    onChange={(e) =>
+                      setUserFilters({ ...userFilters, role: e.target.value })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">All Roles</option>
@@ -938,19 +2058,23 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Search Users</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Search Users
+                  </label>
                   <input
                     type="text"
                     placeholder="Search by name, email, or phone"
                     value={userFilters.search}
-                    onChange={(e) => setUserFilters({...userFilters, search: e.target.value})}
+                    onChange={(e) =>
+                      setUserFilters({ ...userFilters, search: e.target.value })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   />
                 </div>
               </div>
               <div className="mt-4 flex justify-end">
                 <button
-                  onClick={() => setUserFilters({ role: '', search: '' })}
+                  onClick={() => setUserFilters({ role: "", search: "" })}
                   className="px-4 py-2 bg-neutral-1 text-neutral-3 rounded-lg hover:bg-neutral-1/80 transition"
                 >
                   Clear Filters
@@ -960,43 +2084,64 @@ const AdminDashboard = () => {
 
             {/* Edit User Form */}
             {showUserForm && (
-              <form onSubmit={handleSubmitUser} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">Edit User</h3>
+              <form
+                onSubmit={handleSubmitUser}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  Edit User
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Name <span className="text-red-500">*</span></label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Name <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="text"
                       value={userForm.name}
-                      onChange={(e) => setUserForm({...userForm, name: e.target.value})}
+                      onChange={(e) =>
+                        setUserForm({ ...userForm, name: e.target.value })
+                      }
                       required
                       className="w-full px-4 py-2 border rounded-lg"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Email <span className="text-red-500">*</span></label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Email <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="email"
                       value={userForm.email}
-                      onChange={(e) => setUserForm({...userForm, email: e.target.value})}
+                      onChange={(e) =>
+                        setUserForm({ ...userForm, email: e.target.value })
+                      }
                       required
                       className="w-full px-4 py-2 border rounded-lg"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Phone</label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Phone
+                    </label>
                     <input
                       type="tel"
                       value={userForm.phone}
-                      onChange={(e) => setUserForm({...userForm, phone: e.target.value})}
+                      onChange={(e) =>
+                        setUserForm({ ...userForm, phone: e.target.value })
+                      }
                       className="w-full px-4 py-2 border rounded-lg"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Role <span className="text-red-500">*</span></label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Role <span className="text-red-500">*</span>
+                    </label>
                     <select
                       value={userForm.role}
-                      onChange={(e) => setUserForm({...userForm, role: e.target.value})}
+                      onChange={(e) =>
+                        setUserForm({ ...userForm, role: e.target.value })
+                      }
                       required
                       className="w-full px-4 py-2 border rounded-lg"
                     >
@@ -1007,23 +2152,38 @@ const AdminDashboard = () => {
                     </select>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Address</label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Address
+                    </label>
                     <input
                       type="text"
                       value={userForm.address}
-                      onChange={(e) => setUserForm({...userForm, address: e.target.value})}
+                      onChange={(e) =>
+                        setUserForm({ ...userForm, address: e.target.value })
+                      }
                       className="w-full px-4 py-2 border rounded-lg"
                     />
                   </div>
                 </div>
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition">Update User</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
+                  >
+                    Update User
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
                       setShowUserForm(false);
                       setEditingUser(null);
-                      setUserForm({ name: '', email: '', phone: '', address: '', role: 'student' });
+                      setUserForm({
+                        name: "",
+                        email: "",
+                        phone: "",
+                        address: "",
+                        role: "student",
+                      });
                     }}
                     className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg hover:bg-neutral-1/80 transition"
                   >
@@ -1054,17 +2214,31 @@ const AdminDashboard = () => {
                     </thead>
                     <tbody>
                       {filteredUsers.map((u) => (
-                        <tr key={u._id} className="border-b border-neutral-1 hover:bg-neutral-1/50 transition">
-                          <td className="px-4 py-3 text-neutral-3 font-medium">{u.name}</td>
-                          <td className="px-4 py-3 text-neutral-3">{u.email}</td>
-                          <td className="px-4 py-3 text-neutral-3">{u.phone || 'N/A'}</td>
+                        <tr
+                          key={u._id}
+                          className="border-b border-neutral-1 hover:bg-neutral-1/50 transition"
+                        >
+                          <td className="px-4 py-3 text-neutral-3 font-medium">
+                            {u.name}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3">
+                            {u.email}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3">
+                            {u.phone || "N/A"}
+                          </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                              u.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                              u.role === 'student' ? 'bg-blue-100 text-blue-800' :
-                              u.role === 'teacher' ? 'bg-green-100 text-green-800' :
-                              'bg-yellow-100 text-yellow-800'
-                            }`}>
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-semibold ${
+                                u.role === "admin"
+                                  ? "bg-purple-100 text-purple-800"
+                                  : u.role === "student"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : u.role === "teacher"
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
                               {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
                             </span>
                           </td>
@@ -1079,7 +2253,9 @@ const AdminDashboard = () => {
                               </button>
                               <select
                                 value={u.role}
-                                onChange={(e) => handleUpdateUserRole(u._id, e.target.value)}
+                                onChange={(e) =>
+                                  handleUpdateUserRole(u._id, e.target.value)
+                                }
                                 className="px-2 py-1 border border-gray-300 rounded bg-neutral-2 text-neutral-3 text-sm"
                                 title="Change Role"
                               >
@@ -1089,7 +2265,7 @@ const AdminDashboard = () => {
                                 <option value="accountant">Accountant</option>
                               </select>
                               <button
-                                onClick={() => handleDelete('user', u._id)}
+                                onClick={() => handleDelete("user", u._id)}
                                 className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition"
                                 title="Delete User"
                               >
@@ -1107,17 +2283,24 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'notifications':
+      case "notifications":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-neutral-3">Notifications</h2>
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Notifications
+              </h2>
               <button
                 onClick={() => {
                   setShowNotificationForm(!showNotificationForm);
                   if (!showNotificationForm) {
                     setEditingNotification(null);
-                    setNotificationForm({ title: '', message: '', type: 'general', targetRole: 'all' });
+                    setNotificationForm({
+                      title: "",
+                      message: "",
+                      type: "general",
+                      targetRole: "all",
+                    });
                   }
                 }}
                 className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
@@ -1127,18 +2310,67 @@ const AdminDashboard = () => {
               </button>
             </div>
             {showNotificationForm && (
-              <form onSubmit={handleSubmitNotification} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingNotification ? 'Edit Notification' : 'Send Notification'}</h3>
-                <input type="text" placeholder="Title" value={notificationForm.title} onChange={(e) => setNotificationForm({...notificationForm, title: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
-                <textarea placeholder="Message" value={notificationForm.message} onChange={(e) => setNotificationForm({...notificationForm, message: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" rows="3" />
+              <form
+                onSubmit={handleSubmitNotification}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingNotification
+                    ? "Edit Notification"
+                    : "Send Notification"}
+                </h3>
+                <input
+                  type="text"
+                  placeholder="Title"
+                  value={notificationForm.title}
+                  onChange={(e) =>
+                    setNotificationForm({
+                      ...notificationForm,
+                      title: e.target.value,
+                    })
+                  }
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <textarea
+                  placeholder="Message"
+                  value={notificationForm.message}
+                  onChange={(e) =>
+                    setNotificationForm({
+                      ...notificationForm,
+                      message: e.target.value,
+                    })
+                  }
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                  rows="3"
+                />
                 <div className="grid grid-cols-2 gap-4">
-                  <select value={notificationForm.type} onChange={(e) => setNotificationForm({...notificationForm, type: e.target.value})} className="px-4 py-2 border rounded-lg">
+                  <select
+                    value={notificationForm.type}
+                    onChange={(e) =>
+                      setNotificationForm({
+                        ...notificationForm,
+                        type: e.target.value,
+                      })
+                    }
+                    className="px-4 py-2 border rounded-lg"
+                  >
                     <option value="general">General</option>
                     <option value="academic">Academic</option>
                     <option value="event">Event</option>
                     <option value="fee">Fee</option>
                   </select>
-                  <select value={notificationForm.targetRole} onChange={(e) => setNotificationForm({...notificationForm, targetRole: e.target.value})} className="px-4 py-2 border rounded-lg">
+                  <select
+                    value={notificationForm.targetRole}
+                    onChange={(e) =>
+                      setNotificationForm({
+                        ...notificationForm,
+                        targetRole: e.target.value,
+                      })
+                    }
+                    className="px-4 py-2 border rounded-lg"
+                  >
                     <option value="all">All</option>
                     <option value="student">Student</option>
                     <option value="teacher">Teacher</option>
@@ -1146,25 +2378,54 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingNotification ? 'Update' : 'Send'}</button>
-                  <button type="button" onClick={() => {
-                    setShowNotificationForm(false);
-                    setEditingNotification(null);
-                    setNotificationForm({ title: '', message: '', type: 'general', targetRole: 'all' });
-                  }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Cancel</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingNotification ? "Update" : "Send"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNotificationForm(false);
+                      setEditingNotification(null);
+                      setNotificationForm({
+                        title: "",
+                        message: "",
+                        type: "general",
+                        targetRole: "all",
+                      });
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </form>
             )}
             <div className="space-y-4">
               {notifications.map((n) => (
-                <div key={n._id} className="bg-neutral-2 p-4 rounded-lg flex justify-between items-center">
+                <div
+                  key={n._id}
+                  className="bg-neutral-2 p-4 rounded-lg flex justify-between items-center"
+                >
                   <div>
                     <h3 className="font-semibold text-neutral-3">{n.title}</h3>
                     <p className="text-sm text-neutral-3/70">{n.message}</p>
                   </div>
                   <div className="flex space-x-2">
-                    <button onClick={() => handleEditNotification(n)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                    <button onClick={() => handleDelete('notification', n._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
+                    <button
+                      onClick={() => handleEditNotification(n)}
+                      className="text-secondary hover:text-secondary-600"
+                    >
+                      <FiEdit />
+                    </button>
+                    <button
+                      onClick={() => handleDelete("notification", n._id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <FiTrash2 />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1172,51 +2433,129 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'events':
+      case "events":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-neutral-3">Events</h2>
-              <button onClick={() => {
-                setShowEventForm(!showEventForm);
-                if (!showEventForm) {
-                  setEditingEvent(null);
-                  setEventForm({ title: '', description: '', date: '', location: '' });
-                }
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  setShowEventForm(!showEventForm);
+                  if (!showEventForm) {
+                    setEditingEvent(null);
+                    setEventForm({
+                      title: "",
+                      description: "",
+                      date: "",
+                      location: "",
+                    });
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiCalendar />
                 <span>Add Event</span>
               </button>
             </div>
             {showEventForm && (
-              <form onSubmit={handleSubmitEvent} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingEvent ? 'Edit Event' : 'Add Event'}</h3>
-                <input type="text" placeholder="Title" value={eventForm.title} onChange={(e) => setEventForm({...eventForm, title: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
-                <textarea placeholder="Description" value={eventForm.description} onChange={(e) => setEventForm({...eventForm, description: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" rows="3" />
+              <form
+                onSubmit={handleSubmitEvent}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingEvent ? "Edit Event" : "Add Event"}
+                </h3>
+                <input
+                  type="text"
+                  placeholder="Title"
+                  value={eventForm.title}
+                  onChange={(e) =>
+                    setEventForm({ ...eventForm, title: e.target.value })
+                  }
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <textarea
+                  placeholder="Description"
+                  value={eventForm.description}
+                  onChange={(e) =>
+                    setEventForm({ ...eventForm, description: e.target.value })
+                  }
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                  rows="3"
+                />
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="date" value={eventForm.date} onChange={(e) => setEventForm({...eventForm, date: e.target.value})} required className="px-4 py-2 border rounded-lg" />
-                  <input type="text" placeholder="Location" value={eventForm.location} onChange={(e) => setEventForm({...eventForm, location: e.target.value})} className="px-4 py-2 border rounded-lg" />
+                  <input
+                    type="date"
+                    value={eventForm.date}
+                    onChange={(e) =>
+                      setEventForm({ ...eventForm, date: e.target.value })
+                    }
+                    required
+                    className="px-4 py-2 border rounded-lg"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Location"
+                    value={eventForm.location}
+                    onChange={(e) =>
+                      setEventForm({ ...eventForm, location: e.target.value })
+                    }
+                    className="px-4 py-2 border rounded-lg"
+                  />
                 </div>
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingEvent ? 'Update' : 'Create'}</button>
-                  <button type="button" onClick={() => {
-                    setShowEventForm(false);
-                    setEditingEvent(null);
-                    setEventForm({ title: '', description: '', date: '', location: '' });
-                  }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Cancel</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingEvent ? "Update" : "Create"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEventForm(false);
+                      setEditingEvent(null);
+                      setEventForm({
+                        title: "",
+                        description: "",
+                        date: "",
+                        location: "",
+                      });
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </form>
             )}
             <div className="space-y-4">
               {events.map((e) => (
-                <div key={e._id} className="bg-neutral-2 p-4 rounded-lg flex justify-between items-center">
+                <div
+                  key={e._id}
+                  className="bg-neutral-2 p-4 rounded-lg flex justify-between items-center"
+                >
                   <div>
                     <h3 className="font-semibold text-neutral-3">{e.title}</h3>
-                    <p className="text-sm text-neutral-3/70">{new Date(e.date).toLocaleDateString()}</p>
+                    <p className="text-sm text-neutral-3/70">
+                      {formatDateDDMMYYYY(e.date)}
+                    </p>
                   </div>
                   <div className="flex space-x-2">
-                    <button onClick={() => handleEditEvent(e)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                    <button onClick={() => handleDelete('event', e._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
+                    <button
+                      onClick={() => handleEditEvent(e)}
+                      className="text-secondary hover:text-secondary-600"
+                    >
+                      <FiEdit />
+                    </button>
+                    <button
+                      onClick={() => handleDelete("event", e._id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <FiTrash2 />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1224,58 +2563,158 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'carousel':
+      case "carousel":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-neutral-3">Carousel Images</h2>
-              <button onClick={() => {
-                setShowCarouselForm(!showCarouselForm);
-                if (!showCarouselForm) {
-                  setEditingCarousel(null);
-                  setCarouselForm({ image: '', title: '', description: '', order: 0 });
-                  setImageUploadType('link');
-                }
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Carousel Images
+              </h2>
+              <button
+                onClick={() => {
+                  setShowCarouselForm(!showCarouselForm);
+                  if (!showCarouselForm) {
+                    setEditingCarousel(null);
+                    setCarouselForm({
+                      image: "",
+                      title: "",
+                      description: "",
+                      order: 0,
+                    });
+                    setImageUploadType("link");
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiUpload />
                 <span>Upload Image</span>
               </button>
             </div>
             {showCarouselForm && (
-              <form onSubmit={handleSubmitCarousel} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingCarousel ? 'Edit Carousel Image' : 'Upload Carousel Image'}</h3>
+              <form
+                onSubmit={handleSubmitCarousel}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingCarousel
+                    ? "Edit Carousel Image"
+                    : "Upload Carousel Image"}
+                </h3>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Upload Type</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Upload Type
+                  </label>
                   <div className="flex space-x-4 mb-4">
                     <label className="flex items-center">
-                      <input type="radio" value="link" checked={imageUploadType === 'link'} onChange={(e) => setImageUploadType(e.target.value)} className="mr-2" />
+                      <input
+                        type="radio"
+                        value="link"
+                        checked={imageUploadType === "link"}
+                        onChange={(e) => setImageUploadType(e.target.value)}
+                        className="mr-2"
+                      />
                       Image Link
                     </label>
                     <label className="flex items-center">
-                      <input type="radio" value="file" checked={imageUploadType === 'file'} onChange={(e) => setImageUploadType(e.target.value)} className="mr-2" />
+                      <input
+                        type="radio"
+                        value="file"
+                        checked={imageUploadType === "file"}
+                        onChange={(e) => setImageUploadType(e.target.value)}
+                        className="mr-2"
+                      />
                       Upload File
                     </label>
                   </div>
-                  {imageUploadType === 'link' ? (
-                    <input type="text" placeholder="Image URL" value={carouselForm.image} onChange={(e) => setCarouselForm({...carouselForm, image: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                  {imageUploadType === "link" ? (
+                    <input
+                      type="text"
+                      placeholder="Image URL"
+                      value={carouselForm.image}
+                      onChange={(e) =>
+                        setCarouselForm({
+                          ...carouselForm,
+                          image: e.target.value,
+                        })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   ) : (
-                    <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'carousel')} required={!editingCarousel} className="w-full px-4 py-2 border rounded-lg" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, "carousel")}
+                      required={!editingCarousel}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   )}
-                  {carouselForm.image && carouselForm.image.startsWith('data:') && (
-                    <img src={carouselForm.image} alt="Preview" className="mt-2 h-32 object-cover rounded" />
-                  )}
+                  {carouselForm.image &&
+                    carouselForm.image.startsWith("data:") && (
+                      <img
+                        src={carouselForm.image}
+                        alt="Preview"
+                        className="mt-2 h-32 object-cover rounded"
+                      />
+                    )}
                 </div>
-                <input type="text" placeholder="Title" value={carouselForm.title} onChange={(e) => setCarouselForm({...carouselForm, title: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
-                <textarea placeholder="Description" value={carouselForm.description} onChange={(e) => setCarouselForm({...carouselForm, description: e.target.value})} className="w-full px-4 py-2 border rounded-lg" rows="2" />
-                <input type="number" placeholder="Order" value={carouselForm.order} onChange={(e) => setCarouselForm({...carouselForm, order: parseInt(e.target.value)})} className="w-full px-4 py-2 border rounded-lg" />
+                <input
+                  type="text"
+                  placeholder="Title"
+                  value={carouselForm.title}
+                  onChange={(e) =>
+                    setCarouselForm({ ...carouselForm, title: e.target.value })
+                  }
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <textarea
+                  placeholder="Description"
+                  value={carouselForm.description}
+                  onChange={(e) =>
+                    setCarouselForm({
+                      ...carouselForm,
+                      description: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border rounded-lg"
+                  rows="2"
+                />
+                <input
+                  type="number"
+                  placeholder="Order"
+                  value={carouselForm.order}
+                  onChange={(e) =>
+                    setCarouselForm({
+                      ...carouselForm,
+                      order: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingCarousel ? 'Update' : 'Upload'}</button>
-                  <button type="button" onClick={() => {
-                    setShowCarouselForm(false);
-                    setEditingCarousel(null);
-                    setCarouselForm({ image: '', title: '', description: '', order: 0 });
-                    setImageUploadType('link');
-                  }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Cancel</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingCarousel ? "Update" : "Upload"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCarouselForm(false);
+                      setEditingCarousel(null);
+                      setCarouselForm({
+                        image: "",
+                        title: "",
+                        description: "",
+                        order: 0,
+                      });
+                      setImageUploadType("link");
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </form>
             )}
@@ -1283,12 +2722,32 @@ const AdminDashboard = () => {
               {carouselImages.map((img) => (
                 <div key={img._id} className="bg-neutral-2 p-4 rounded-lg">
                   <div className="h-48 bg-gray-200 rounded mb-2 flex items-center justify-center overflow-hidden">
-                    {img.image ? <img src={img.image} alt={img.title} className="h-full w-full object-cover rounded" /> : <FiImage className="text-4xl text-gray-400" />}
+                    {img.image ? (
+                      <img
+                        src={img.image}
+                        alt={img.title}
+                        className="h-full w-full object-cover rounded"
+                      />
+                    ) : (
+                      <FiImage className="text-4xl text-gray-400" />
+                    )}
                   </div>
-                  <h3 className="font-semibold text-neutral-3 mb-1">{img.title}</h3>
+                  <h3 className="font-semibold text-neutral-3 mb-1">
+                    {img.title}
+                  </h3>
                   <div className="flex space-x-2 mt-2">
-                    <button onClick={() => handleEditCarousel(img)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                    <button onClick={() => handleDelete('carousel', img._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
+                    <button
+                      onClick={() => handleEditCarousel(img)}
+                      className="text-secondary hover:text-secondary-600"
+                    >
+                      <FiEdit />
+                    </button>
+                    <button
+                      onClick={() => handleDelete("carousel", img._id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <FiTrash2 />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1296,10 +2755,12 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'contacts':
+      case "contacts":
         return (
           <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">Contact Queries</h2>
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              Contact Queries
+            </h2>
             <div className="space-y-4">
               {contacts.map((c) => (
                 <div key={c._id} className="bg-neutral-2 p-4 rounded-lg">
@@ -1308,13 +2769,26 @@ const AdminDashboard = () => {
                       <h3 className="font-semibold text-neutral-3">{c.name}</h3>
                       <p className="text-sm text-neutral-3/70">{c.email}</p>
                     </div>
-                    <span className={`px-2 py-1 rounded text-xs ${c.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : c.status === 'read' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>{c.status}</span>
+                    <span
+                      className={`px-2 py-1 rounded text-xs ${c.status === "pending" ? "bg-yellow-100 text-yellow-800" : c.status === "read" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}
+                    >
+                      {c.status}
+                    </span>
                   </div>
-                  <p className="font-semibold text-neutral-3 mb-1">{c.subject}</p>
+                  <p className="font-semibold text-neutral-3 mb-1">
+                    {c.subject}
+                  </p>
                   <p className="text-sm text-neutral-3/70 mb-2">{c.message}</p>
                   <div className="flex justify-between items-center">
-                    <p className="text-xs text-neutral-3/50">{new Date(c.createdAt).toLocaleDateString()}</p>
-                    <button onClick={() => handleDelete('contact', c._id)} className="text-red-600"><FiTrash2 /></button>
+                    <p className="text-xs text-neutral-3/50">
+                      {formatDateDDMMYYYY(c.createdAt)}
+                    </p>
+                    <button
+                      onClick={() => handleDelete("contact", c._id)}
+                      className="text-red-600"
+                    >
+                      <FiTrash2 />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1322,58 +2796,157 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'gallery':
+      case "gallery":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-neutral-3">Gallery</h2>
-              <button onClick={() => {
-                setShowGalleryForm(!showGalleryForm);
-                if (!showGalleryForm) {
-                  setEditingGallery(null);
-                  setGalleryForm({ image: '', galleryName: '', title: '', description: '' });
-                  setImageUploadType('link');
-                }
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  setShowGalleryForm(!showGalleryForm);
+                  if (!showGalleryForm) {
+                    setEditingGallery(null);
+                    setGalleryForm({
+                      image: "",
+                      galleryName: "",
+                      title: "",
+                      description: "",
+                    });
+                    setImageUploadType("link");
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiUpload />
                 <span>Upload Image</span>
               </button>
             </div>
             {showGalleryForm && (
-              <form onSubmit={handleSubmitGallery} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingGallery ? 'Edit Gallery Image' : 'Upload Gallery Image'}</h3>
+              <form
+                onSubmit={handleSubmitGallery}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingGallery
+                    ? "Edit Gallery Image"
+                    : "Upload Gallery Image"}
+                </h3>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Upload Type</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Upload Type
+                  </label>
                   <div className="flex space-x-4 mb-4">
                     <label className="flex items-center">
-                      <input type="radio" value="link" checked={imageUploadType === 'link'} onChange={(e) => setImageUploadType(e.target.value)} className="mr-2" />
+                      <input
+                        type="radio"
+                        value="link"
+                        checked={imageUploadType === "link"}
+                        onChange={(e) => setImageUploadType(e.target.value)}
+                        className="mr-2"
+                      />
                       Image Link
                     </label>
                     <label className="flex items-center">
-                      <input type="radio" value="file" checked={imageUploadType === 'file'} onChange={(e) => setImageUploadType(e.target.value)} className="mr-2" />
+                      <input
+                        type="radio"
+                        value="file"
+                        checked={imageUploadType === "file"}
+                        onChange={(e) => setImageUploadType(e.target.value)}
+                        className="mr-2"
+                      />
                       Upload File
                     </label>
                   </div>
-                  {imageUploadType === 'link' ? (
-                    <input type="text" placeholder="Image URL" value={galleryForm.image} onChange={(e) => setGalleryForm({...galleryForm, image: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                  {imageUploadType === "link" ? (
+                    <input
+                      type="text"
+                      placeholder="Image URL"
+                      value={galleryForm.image}
+                      onChange={(e) =>
+                        setGalleryForm({
+                          ...galleryForm,
+                          image: e.target.value,
+                        })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   ) : (
-                    <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'gallery')} required={!editingGallery} className="w-full px-4 py-2 border rounded-lg" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, "gallery")}
+                      required={!editingGallery}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   )}
-                  {galleryForm.image && galleryForm.image.startsWith('data:') && (
-                    <img src={galleryForm.image} alt="Preview" className="mt-2 h-32 object-cover rounded" />
-                  )}
+                  {galleryForm.image &&
+                    galleryForm.image.startsWith("data:") && (
+                      <img
+                        src={galleryForm.image}
+                        alt="Preview"
+                        className="mt-2 h-32 object-cover rounded"
+                      />
+                    )}
                 </div>
-                <input type="text" placeholder="Gallery Name" value={galleryForm.galleryName} onChange={(e) => setGalleryForm({...galleryForm, galleryName: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
-                <input type="text" placeholder="Title" value={galleryForm.title} onChange={(e) => setGalleryForm({...galleryForm, title: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
-                <textarea placeholder="Description" value={galleryForm.description} onChange={(e) => setGalleryForm({...galleryForm, description: e.target.value})} className="w-full px-4 py-2 border rounded-lg" rows="2" />
+                <input
+                  type="text"
+                  placeholder="Gallery Name"
+                  value={galleryForm.galleryName}
+                  onChange={(e) =>
+                    setGalleryForm({
+                      ...galleryForm,
+                      galleryName: e.target.value,
+                    })
+                  }
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <input
+                  type="text"
+                  placeholder="Title"
+                  value={galleryForm.title}
+                  onChange={(e) =>
+                    setGalleryForm({ ...galleryForm, title: e.target.value })
+                  }
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <textarea
+                  placeholder="Description"
+                  value={galleryForm.description}
+                  onChange={(e) =>
+                    setGalleryForm({
+                      ...galleryForm,
+                      description: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border rounded-lg"
+                  rows="2"
+                />
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingGallery ? 'Update' : 'Upload'}</button>
-                  <button type="button" onClick={() => {
-                    setShowGalleryForm(false);
-                    setEditingGallery(null);
-                    setGalleryForm({ image: '', galleryName: '', title: '', description: '' });
-                    setImageUploadType('link');
-                  }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Cancel</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingGallery ? "Update" : "Upload"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowGalleryForm(false);
+                      setEditingGallery(null);
+                      setGalleryForm({
+                        image: "",
+                        galleryName: "",
+                        title: "",
+                        description: "",
+                      });
+                      setImageUploadType("link");
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </form>
             )}
@@ -1381,13 +2954,33 @@ const AdminDashboard = () => {
               {galleryImages.map((img) => (
                 <div key={img._id} className="bg-neutral-2 p-4 rounded-lg">
                   <div className="h-48 bg-gray-200 rounded mb-2 flex items-center justify-center overflow-hidden">
-                    {img.image ? <img src={img.image} alt={img.title} className="h-full w-full object-cover rounded" /> : <FiImage className="text-4xl text-gray-400" />}
+                    {img.image ? (
+                      <img
+                        src={img.image}
+                        alt={img.title}
+                        className="h-full w-full object-cover rounded"
+                      />
+                    ) : (
+                      <FiImage className="text-4xl text-gray-400" />
+                    )}
                   </div>
-                  <h3 className="font-semibold text-neutral-3 mb-1">{img.galleryName}</h3>
+                  <h3 className="font-semibold text-neutral-3 mb-1">
+                    {img.galleryName}
+                  </h3>
                   <p className="text-sm text-neutral-3/70 mb-2">{img.title}</p>
                   <div className="flex space-x-2">
-                    <button onClick={() => handleEditGallery(img)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                    <button onClick={() => handleDelete('gallery', img._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
+                    <button
+                      onClick={() => handleEditGallery(img)}
+                      className="text-secondary hover:text-secondary-600"
+                    >
+                      <FiEdit />
+                    </button>
+                    <button
+                      onClick={() => handleDelete("gallery", img._id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <FiTrash2 />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1395,35 +2988,87 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'classes':
+      case "classes":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-neutral-3">Classes</h2>
-              <button onClick={() => {
-                setShowClassForm(!showClassForm);
-                if (!showClassForm) {
-                  setEditingClass(null);
-                  setClassForm({ className: '', section: '', description: '' });
-                }
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  setShowClassForm(!showClassForm);
+                  if (!showClassForm) {
+                    setEditingClass(null);
+                    setClassForm({
+                      className: "",
+                      section: "",
+                      description: "",
+                    });
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiUserPlus />
                 <span>Add Class</span>
               </button>
             </div>
             {showClassForm && (
-              <form onSubmit={handleSubmitClass} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingClass ? 'Edit Class' : 'Add Class'}</h3>
-                <input type="text" placeholder="Class Name (e.g., 10th, 11th, 12th)" value={classForm.className} onChange={(e) => setClassForm({...classForm, className: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
-                <input type="text" placeholder="Section (Optional)" value={classForm.section} onChange={(e) => setClassForm({...classForm, section: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
-                <textarea placeholder="Description (Optional)" value={classForm.description} onChange={(e) => setClassForm({...classForm, description: e.target.value})} className="w-full px-4 py-2 border rounded-lg" rows="2" />
+              <form
+                onSubmit={handleSubmitClass}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingClass ? "Edit Class" : "Add Class"}
+                </h3>
+                <input
+                  type="text"
+                  placeholder="Class Name (e.g., 10th, 11th, 12th)"
+                  value={classForm.className}
+                  onChange={(e) =>
+                    setClassForm({ ...classForm, className: e.target.value })
+                  }
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <input
+                  type="text"
+                  placeholder="Section (Optional)"
+                  value={classForm.section}
+                  onChange={(e) =>
+                    setClassForm({ ...classForm, section: e.target.value })
+                  }
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <textarea
+                  placeholder="Description (Optional)"
+                  value={classForm.description}
+                  onChange={(e) =>
+                    setClassForm({ ...classForm, description: e.target.value })
+                  }
+                  className="w-full px-4 py-2 border rounded-lg"
+                  rows="2"
+                />
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingClass ? 'Update Class' : 'Add Class'}</button>
-                  <button type="button" onClick={() => {
-                    setShowClassForm(false);
-                    setEditingClass(null);
-                    setClassForm({ className: '', section: '', description: '' });
-                  }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Cancel</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingClass ? "Update Class" : "Add Class"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowClassForm(false);
+                      setEditingClass(null);
+                      setClassForm({
+                        className: "",
+                        section: "",
+                        description: "",
+                      });
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </form>
             )}
@@ -1439,12 +3084,26 @@ const AdminDashboard = () => {
                 <tbody>
                   {classes.map((c) => (
                     <tr key={c._id} className="border-b border-neutral-1">
-                      <td className="px-4 py-3 text-neutral-3">{c.className}</td>
-                      <td className="px-4 py-3 text-neutral-3">{c.section || 'N/A'}</td>
+                      <td className="px-4 py-3 text-neutral-3">
+                        {c.className}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-3">
+                        {c.section || "N/A"}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex space-x-2">
-                          <button onClick={() => handleEditClass(c)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                          <button onClick={() => handleDelete('class', c._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
+                          <button
+                            onClick={() => handleEditClass(c)}
+                            className="text-secondary hover:text-secondary-600"
+                          >
+                            <FiEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDelete("class", c._id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <FiTrash2 />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1455,36 +3114,62 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'fees':
+      case "fees":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-neutral-3">Fees Management</h2>
-              <button onClick={() => {
-                setShowFeeForm(!showFeeForm);
-                if (!showFeeForm) {
-                  setEditingFee(null);
-                  setFeeForm({
-                    selectedClass: '', selectedStudent: '', studentName: '', amount: '', feesType: 'monthly',
-                    month: '', installmentNumber: '', dueDate: '', remarks: '', feeCategory: 'regular', transportAmount: ''
-                  });
-                  setClassStudents([]);
-                }
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Fees Management
+              </h2>
+              <button
+                onClick={() => {
+                  setShowFeeForm(!showFeeForm);
+                  if (!showFeeForm) {
+                    setEditingFee(null);
+                    setFeeForm({
+                      selectedClass: "",
+                      selectedStudent: "",
+                      studentName: "",
+                      amount: "",
+                      feesType: "monthly",
+                      month: "",
+                      installmentNumber: "",
+                      dueDate: "",
+                      remarks: "",
+                      feeCategory: "regular",
+                      transportAmount: "",
+                    });
+                    setClassStudents([]);
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiDollarSign />
                 <span>Add Fee</span>
               </button>
             </div>
             {showFeeForm && (
-              <form onSubmit={handleSubmitFee} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingFee ? 'Edit Fee' : 'Add Fee'}</h3>
+              <form
+                onSubmit={handleSubmitFee}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingFee ? "Edit Fee" : "Add Fee"}
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Select Class</label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Select Class
+                    </label>
                     <select
                       value={feeForm.selectedClass}
                       onChange={async (e) => {
-                        setFeeForm({...feeForm, selectedClass: e.target.value, selectedStudent: '', studentName: ''});
+                        setFeeForm({
+                          ...feeForm,
+                          selectedClass: e.target.value,
+                          selectedStudent: "",
+                          studentName: "",
+                        });
                         if (e.target.value) {
                           await fetchStudentsByClass(e.target.value);
                         } else {
@@ -1496,12 +3181,16 @@ const AdminDashboard = () => {
                     >
                       <option value="">Select Class</option>
                       {classes.map((c) => (
-                        <option key={c._id} value={c.className}>{c.className} {c.section ? `- ${c.section}` : ''}</option>
+                        <option key={c._id} value={c.className}>
+                          {c.className} {c.section ? `- ${c.section}` : ""}
+                        </option>
                       ))}
                     </select>
                   </div>
                   <div className="relative">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Select Student (Roll/Enrollment Number)</label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Select Student (Roll/Enrollment Number)
+                    </label>
                     <input
                       type="text"
                       placeholder="Search by name, roll number, enrollment number, or mobile"
@@ -1510,29 +3199,47 @@ const AdminDashboard = () => {
                         setFeeStudentSearchQuery(e.target.value);
                         if (!e.target.value) {
                           setFeeSearchResults([]);
-                          setFeeForm({...feeForm, selectedStudent: '', studentName: '', transportAmount: ''});
+                          setFeeForm({
+                            ...feeForm,
+                            selectedStudent: "",
+                            studentName: "",
+                            transportAmount: "",
+                          });
                         }
                       }}
                       className="w-full px-4 py-2 border rounded-lg"
                     />
-                    {(feeSearchResults.length > 0 || (feeStudentSearchQuery && feeSearchResults.length === 0 && feeStudentSearchQuery.length >= 2)) && (
+                    {(feeSearchResults.length > 0 ||
+                      (feeStudentSearchQuery &&
+                        feeSearchResults.length === 0 &&
+                        feeStudentSearchQuery.length >= 2)) && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {feeSearchResults.length > 0 ? (
                           feeSearchResults.map((s) => (
                             <div
                               key={s._id}
                               onClick={() => {
-                                setFeeForm({...feeForm, selectedStudent: s._id, studentName: s.studentName, transportAmount: ''});
-                                setFeeStudentSearchQuery(`${s.rollNumber} / ${s.enrollmentNumber} - ${s.studentName}`);
+                                setFeeForm({
+                                  ...feeForm,
+                                  selectedStudent: s._id,
+                                  studentName: s.studentName,
+                                  transportAmount: "",
+                                });
+                                setFeeStudentSearchQuery(
+                                  `${s.rollNumber} / ${s.enrollmentNumber} - ${s.studentName}`,
+                                );
                                 setFeeSearchResults([]);
                               }}
                               className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                             >
-                              {s.rollNumber} / {s.enrollmentNumber} - {s.studentName} ({s.class})
+                              {s.rollNumber} / {s.enrollmentNumber} -{" "}
+                              {s.studentName} ({s.class})
                             </div>
                           ))
                         ) : (
-                          <div className="px-4 py-2 text-gray-500">No students found</div>
+                          <div className="px-4 py-2 text-gray-500">
+                            No students found
+                          </div>
                         )}
                       </div>
                     )}
@@ -1540,16 +3247,26 @@ const AdminDashboard = () => {
                       <select
                         value={feeForm.selectedStudent}
                         onChange={(e) => {
-                          const student = classStudents.find(s => s._id === e.target.value);
-                          setFeeForm({...feeForm, selectedStudent: e.target.value, studentName: student ? student.studentName : '', transportAmount: ''});
+                          const student = classStudents.find(
+                            (s) => s._id === e.target.value,
+                          );
+                          setFeeForm({
+                            ...feeForm,
+                            selectedStudent: e.target.value,
+                            studentName: student ? student.studentName : "",
+                            transportAmount: "",
+                          });
                         }}
-                        disabled={!feeForm.selectedClass || classStudents.length === 0}
+                        disabled={
+                          !feeForm.selectedClass || classStudents.length === 0
+                        }
                         className="w-full px-4 py-2 border rounded-lg disabled:bg-gray-100 mt-2"
                       >
                         <option value="">Or select from class</option>
                         {classStudents.map((s) => (
                           <option key={s._id} value={s._id}>
-                            {s.rollNumber} / {s.enrollmentNumber} - {s.studentName}
+                            {s.rollNumber} / {s.enrollmentNumber} -{" "}
+                            {s.studentName}
                           </option>
                         ))}
                       </select>
@@ -1557,15 +3274,26 @@ const AdminDashboard = () => {
                   </div>
                   {feeForm.studentName && (
                     <div className="md:col-span-2">
-                      <label className="block text-sm text-neutral-3/70 mb-1">Student Name</label>
-                      <input type="text" value={feeForm.studentName} disabled className="w-full px-4 py-2 border rounded-lg bg-gray-100" />
+                      <label className="block text-sm text-neutral-3/70 mb-1">
+                        Student Name
+                      </label>
+                      <input
+                        type="text"
+                        value={feeForm.studentName}
+                        disabled
+                        className="w-full px-4 py-2 border rounded-lg bg-gray-100"
+                      />
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Fees Type</label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Fees Type
+                    </label>
                     <select
                       value={feeForm.feesType}
-                      onChange={(e) => setFeeForm({...feeForm, feesType: e.target.value})}
+                      onChange={(e) =>
+                        setFeeForm({ ...feeForm, feesType: e.target.value })
+                      }
                       required
                       className="w-full px-4 py-2 border rounded-lg"
                     >
@@ -1574,85 +3302,196 @@ const AdminDashboard = () => {
                       <option value="annual">Annual</option>
                     </select>
                   </div>
-                  {feeForm.feesType === 'monthly' && (
+                  {feeForm.feesType === "monthly" && (
                     <div>
-                      <label className="block text-sm text-neutral-3/70 mb-1">Month</label>
-                      <input type="text" placeholder="e.g., January 2024" value={feeForm.month} onChange={(e) => setFeeForm({...feeForm, month: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                      <label className="block text-sm text-neutral-3/70 mb-1">
+                        Month
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., January 2024"
+                        value={feeForm.month}
+                        onChange={(e) =>
+                          setFeeForm({ ...feeForm, month: e.target.value })
+                        }
+                        required
+                        className="w-full px-4 py-2 border rounded-lg"
+                      />
                     </div>
                   )}
-                  {feeForm.feesType === 'installment' && (
+                  {feeForm.feesType === "installment" && (
                     <div>
-                      <label className="block text-sm text-neutral-3/70 mb-1">Installment Number</label>
-                      <input type="number" placeholder="e.g., 1, 2, 3" value={feeForm.installmentNumber} onChange={(e) => setFeeForm({...feeForm, installmentNumber: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                      <label className="block text-sm text-neutral-3/70 mb-1">
+                        Installment Number
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g., 1, 2, 3"
+                        value={feeForm.installmentNumber}
+                        onChange={(e) =>
+                          setFeeForm({
+                            ...feeForm,
+                            installmentNumber: e.target.value,
+                          })
+                        }
+                        required
+                        className="w-full px-4 py-2 border rounded-lg"
+                      />
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Amount</label>
-                    <input type="number" placeholder="Fee Amount" value={feeForm.amount} onChange={(e) => setFeeForm({...feeForm, amount: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Amount
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Fee Amount"
+                      value={feeForm.amount}
+                      onChange={(e) =>
+                        setFeeForm({ ...feeForm, amount: e.target.value })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
-                  {feeForm.selectedStudent && (() => {
-                    const selectedStudent = students.find(s => s._id === feeForm.selectedStudent) || classStudents.find(s => s._id === feeForm.selectedStudent);
-                    if (selectedStudent && selectedStudent.studentType === 'dayScholar' && selectedStudent.transportOpted) {
-                      return (
-                        <div>
-                          <label className="block text-sm text-neutral-3/70 mb-1">Transport Fee Amount (Optional)</label>
-                          <input type="number" placeholder="Transport Fee" value={feeForm.transportAmount} onChange={(e) => setFeeForm({...feeForm, transportAmount: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
-                          <p className="text-xs text-neutral-3/50 mt-1">Student has opted for transport</p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
+                  {feeForm.selectedStudent &&
+                    (() => {
+                      const selectedStudent =
+                        students.find(
+                          (s) => s._id === feeForm.selectedStudent,
+                        ) ||
+                        classStudents.find(
+                          (s) => s._id === feeForm.selectedStudent,
+                        );
+                      if (
+                        selectedStudent &&
+                        selectedStudent.studentType === "dayScholar" &&
+                        selectedStudent.transportOpted
+                      ) {
+                        return (
+                          <div>
+                            <label className="block text-sm text-neutral-3/70 mb-1">
+                              Transport Fee Amount (Optional)
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="Transport Fee"
+                              value={feeForm.transportAmount}
+                              onChange={(e) =>
+                                setFeeForm({
+                                  ...feeForm,
+                                  transportAmount: e.target.value,
+                                })
+                              }
+                              className="w-full px-4 py-2 border rounded-lg"
+                            />
+                            <p className="text-xs text-neutral-3/50 mt-1">
+                              Student has opted for transport
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Due Date</label>
-                    <input type="date" value={feeForm.dueDate} onChange={(e) => setFeeForm({...feeForm, dueDate: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      value={feeForm.dueDate}
+                      onChange={(e) =>
+                        setFeeForm({ ...feeForm, dueDate: e.target.value })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Remarks (Optional)</label>
-                    <textarea value={feeForm.remarks} onChange={(e) => setFeeForm({...feeForm, remarks: e.target.value})} className="w-full px-4 py-2 border rounded-lg" rows="2" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Remarks (Optional)
+                    </label>
+                    <textarea
+                      value={feeForm.remarks}
+                      onChange={(e) =>
+                        setFeeForm({ ...feeForm, remarks: e.target.value })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                      rows="2"
+                    />
                   </div>
                 </div>
-                  <div className="flex space-x-2">
-                    <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingFee ? 'Update Fee' : 'Submit Fee'}</button>
-                    <button type="button" onClick={() => {
+                <div className="flex space-x-2">
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingFee ? "Update Fee" : "Submit Fee"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
                       setShowFeeForm(false);
                       setEditingFee(null);
                       setFeeForm({
-                        selectedClass: '', selectedStudent: '', studentName: '', amount: '', feesType: 'monthly',
-                        month: '', installmentNumber: '', dueDate: '', remarks: '', feeCategory: 'regular', transportAmount: ''
+                        selectedClass: "",
+                        selectedStudent: "",
+                        studentName: "",
+                        amount: "",
+                        feesType: "monthly",
+                        month: "",
+                        installmentNumber: "",
+                        dueDate: "",
+                        remarks: "",
+                        feeCategory: "regular",
+                        transportAmount: "",
                       });
                       setClassStudents([]);
-                      setFeeStudentSearchQuery('');
+                      setFeeStudentSearchQuery("");
                       setFeeSearchResults([]);
-                    }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Cancel</button>
-                  </div>
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </form>
             )}
-            
+
             {/* Filter Options */}
             <div className="bg-neutral-2 rounded-lg shadow-md p-6 mb-6">
-              <h3 className="text-lg font-semibold text-neutral-3 mb-4">Filter Fees</h3>
+              <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                Filter Fees
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Filter by Class</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Filter by Class
+                  </label>
                   <select
                     value={feeFilters.class}
-                    onChange={(e) => setFeeFilters({...feeFilters, class: e.target.value})}
+                    onChange={(e) =>
+                      setFeeFilters({ ...feeFilters, class: e.target.value })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">All Classes</option>
                     {classes.map((c) => (
                       <option key={c._id} value={c.className}>
-                        {c.className} {c.section ? `- ${c.section}` : ''}
+                        {c.className} {c.section ? `- ${c.section}` : ""}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Filter by Status</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Filter by Status
+                  </label>
                   <select
                     value={feeFilters.status}
-                    onChange={(e) => setFeeFilters({...feeFilters, status: e.target.value})}
+                    onChange={(e) =>
+                      setFeeFilters({ ...feeFilters, status: e.target.value })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">All Status</option>
@@ -1662,10 +3501,17 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Filter by Category</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Filter by Category
+                  </label>
                   <select
                     value={feeFilters.feeCategory}
-                    onChange={(e) => setFeeFilters({...feeFilters, feeCategory: e.target.value})}
+                    onChange={(e) =>
+                      setFeeFilters({
+                        ...feeFilters,
+                        feeCategory: e.target.value,
+                      })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">All Categories</option>
@@ -1675,10 +3521,14 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Filter by Type</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Filter by Type
+                  </label>
                   <select
                     value={feeFilters.feesType}
-                    onChange={(e) => setFeeFilters({...feeFilters, feesType: e.target.value})}
+                    onChange={(e) =>
+                      setFeeFilters({ ...feeFilters, feesType: e.target.value })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">All Types</option>
@@ -1688,19 +3538,34 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Search Student</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Search Student
+                  </label>
                   <input
                     type="text"
                     placeholder="Search by student name"
                     value={feeFilters.studentSearch}
-                    onChange={(e) => setFeeFilters({...feeFilters, studentSearch: e.target.value})}
+                    onChange={(e) =>
+                      setFeeFilters({
+                        ...feeFilters,
+                        studentSearch: e.target.value,
+                      })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   />
                 </div>
               </div>
               <div className="mt-4 flex justify-end">
                 <button
-                  onClick={() => setFeeFilters({ class: '', status: '', feeCategory: '', feesType: '', studentSearch: '' })}
+                  onClick={() =>
+                    setFeeFilters({
+                      class: "",
+                      status: "",
+                      feeCategory: "",
+                      feesType: "",
+                      studentSearch: "",
+                    })
+                  }
                   className="px-4 py-2 bg-neutral-1 text-neutral-3 rounded-lg hover:bg-neutral-1/80 transition"
                 >
                   Clear Filters
@@ -1727,7 +3592,9 @@ const AdminDashboard = () => {
                     .filter((f) => {
                       // Filter by class
                       if (feeFilters.class) {
-                        const student = students.find(s => s._id === (f.studentId?._id || f.studentId));
+                        const student = students.find(
+                          (s) => s._id === (f.studentId?._id || f.studentId),
+                        );
                         if (!student || student.class !== feeFilters.class) {
                           return false;
                         }
@@ -1737,46 +3604,90 @@ const AdminDashboard = () => {
                         return false;
                       }
                       // Filter by category
-                      if (feeFilters.feeCategory && f.feeCategory !== feeFilters.feeCategory) {
+                      if (
+                        feeFilters.feeCategory &&
+                        f.feeCategory !== feeFilters.feeCategory
+                      ) {
                         return false;
                       }
                       // Filter by type
-                      if (feeFilters.feesType && f.feesType !== feeFilters.feesType) {
+                      if (
+                        feeFilters.feesType &&
+                        f.feesType !== feeFilters.feesType
+                      ) {
                         return false;
                       }
                       // Filter by student search
                       if (feeFilters.studentSearch) {
-                        const student = students.find(s => s._id === (f.studentId?._id || f.studentId));
-                        const searchTerm = feeFilters.studentSearch.toLowerCase();
-                        if (!student || !student.studentName.toLowerCase().includes(searchTerm)) {
+                        const student = students.find(
+                          (s) => s._id === (f.studentId?._id || f.studentId),
+                        );
+                        const searchTerm =
+                          feeFilters.studentSearch.toLowerCase();
+                        if (
+                          !student ||
+                          !student.studentName
+                            .toLowerCase()
+                            .includes(searchTerm)
+                        ) {
                           return false;
                         }
                       }
                       return true;
                     })
                     .map((f) => {
-                      const student = students.find(s => s._id === (f.studentId?._id || f.studentId));
+                      const student = students.find(
+                        (s) => s._id === (f.studentId?._id || f.studentId),
+                      );
                       return (
                         <tr key={f._id} className="border-b border-neutral-1">
-                          <td className="px-4 py-3 text-neutral-3">{f.studentId?.studentName || student?.studentName || 'N/A'}</td>
-                          <td className="px-4 py-3 text-neutral-3">{student?.class || 'N/A'}</td>
-                          <td className="px-4 py-3 text-neutral-3 capitalize">{f.feesType || 'monthly'}</td>
-                          <td className="px-4 py-3 text-neutral-3 capitalize">{f.feeCategory || 'regular'}</td>
-                          <td className="px-4 py-3 text-neutral-3 font-semibold">₹{f.amount}</td>
-                          <td className="px-4 py-3 text-neutral-3">{new Date(f.dueDate).toLocaleDateString()}</td>
+                          <td className="px-4 py-3 text-neutral-3">
+                            {f.studentId?.studentName ||
+                              student?.studentName ||
+                              "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3">
+                            {student?.class || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3 capitalize">
+                            {f.feesType || "monthly"}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3 capitalize">
+                            {f.feeCategory || "regular"}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3 font-semibold">
+                            ₹{f.amount}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3">
+                            {formatDateDDMMYYYY(f.dueDate)}
+                          </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded text-xs ${
-                              f.status === 'paid' ? 'bg-green-100 text-green-800' :
-                              f.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                              'bg-yellow-100 text-yellow-800'
-                            }`}>
+                            <span
+                              className={`px-2 py-1 rounded text-xs ${
+                                f.status === "paid"
+                                  ? "bg-green-100 text-green-800"
+                                  : f.status === "overdue"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
                               {f.status}
                             </span>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex space-x-2">
-                              <button onClick={() => handleEditFee(f)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                              <button onClick={() => handleDelete('fee', f._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
+                              <button
+                                onClick={() => handleEditFee(f)}
+                                className="text-secondary hover:text-secondary-600"
+                              >
+                                <FiEdit />
+                              </button>
+                              <button
+                                onClick={() => handleDelete("fee", f._id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <FiTrash2 />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1788,21 +3699,29 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'fines':
+      case "fines":
         // Calculate fine statistics
         const totalFines = fines.length;
-        const paidFines = fines.filter(f => f.status === 'paid').length;
-        const pendingFines = fines.filter(f => f.status === 'pending').length;
-        const overdueFines = fines.filter(f => f.status === 'overdue').length;
+        const paidFines = fines.filter((f) => f.status === "paid").length;
+        const pendingFines = fines.filter((f) => f.status === "pending").length;
+        const overdueFines = fines.filter((f) => f.status === "overdue").length;
         const totalAmount = fines.reduce((sum, f) => sum + (f.amount || 0), 0);
-        const paidAmount = fines.filter(f => f.status === 'paid').reduce((sum, f) => sum + (f.amount || 0), 0);
-        const pendingAmount = fines.filter(f => f.status === 'pending').reduce((sum, f) => sum + (f.amount || 0), 0);
-        const overdueAmount = fines.filter(f => f.status === 'overdue').reduce((sum, f) => sum + (f.amount || 0), 0);
+        const paidAmount = fines
+          .filter((f) => f.status === "paid")
+          .reduce((sum, f) => sum + (f.amount || 0), 0);
+        const pendingAmount = fines
+          .filter((f) => f.status === "pending")
+          .reduce((sum, f) => sum + (f.amount || 0), 0);
+        const overdueAmount = fines
+          .filter((f) => f.status === "overdue")
+          .reduce((sum, f) => sum + (f.amount || 0), 0);
 
         const filteredFines = fines.filter((f) => {
           // Filter by class
           if (fineFilters.class) {
-            const student = students.find(s => s._id === (f.studentId?._id || f.studentId));
+            const student = students.find(
+              (s) => s._id === (f.studentId?._id || f.studentId),
+            );
             if (!student || student.class !== fineFilters.class) {
               return false;
             }
@@ -1817,9 +3736,14 @@ const AdminDashboard = () => {
           }
           // Filter by student search
           if (fineFilters.studentSearch) {
-            const student = students.find(s => s._id === (f.studentId?._id || f.studentId));
+            const student = students.find(
+              (s) => s._id === (f.studentId?._id || f.studentId),
+            );
             const searchTerm = fineFilters.studentSearch.toLowerCase();
-            if (!student || !student.studentName.toLowerCase().includes(searchTerm)) {
+            if (
+              !student ||
+              !student.studentName.toLowerCase().includes(searchTerm)
+            ) {
               return false;
             }
           }
@@ -1829,18 +3753,29 @@ const AdminDashboard = () => {
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-neutral-3">Fines Management</h2>
-              <button onClick={() => {
-                setShowFineForm(!showFineForm);
-                if (!showFineForm) {
-                  setEditingFine(null);
-                  setFineForm({
-                    selectedStudent: '', studentName: '', amount: '', reason: '', dueDate: '', remarks: '', fineType: 'other'
-                  });
-                  setFineStudentSearchQuery('');
-                  setFineSearchResults([]);
-                }
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Fines Management
+              </h2>
+              <button
+                onClick={() => {
+                  setShowFineForm(!showFineForm);
+                  if (!showFineForm) {
+                    setEditingFine(null);
+                    setFineForm({
+                      selectedStudent: "",
+                      studentName: "",
+                      amount: "",
+                      reason: "",
+                      dueDate: "",
+                      remarks: "",
+                      fineType: "other",
+                    });
+                    setFineStudentSearchQuery("");
+                    setFineSearchResults([]);
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiDollarSign />
                 <span>Add Fine</span>
               </button>
@@ -1851,9 +3786,13 @@ const AdminDashboard = () => {
               <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-lg shadow-md">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-blue-100 text-sm font-medium">Total Fines</p>
+                    <p className="text-blue-100 text-sm font-medium">
+                      Total Fines
+                    </p>
                     <p className="text-3xl font-bold mt-1">{totalFines}</p>
-                    <p className="text-blue-100 text-sm mt-1">₹{totalAmount.toLocaleString()}</p>
+                    <p className="text-blue-100 text-sm mt-1">
+                      ₹{totalAmount.toLocaleString()}
+                    </p>
                   </div>
                   <FiDollarSign className="text-4xl opacity-80" />
                 </div>
@@ -1863,7 +3802,9 @@ const AdminDashboard = () => {
                   <div>
                     <p className="text-green-100 text-sm font-medium">Paid</p>
                     <p className="text-3xl font-bold mt-1">{paidFines}</p>
-                    <p className="text-green-100 text-sm mt-1">₹{paidAmount.toLocaleString()}</p>
+                    <p className="text-green-100 text-sm mt-1">
+                      ₹{paidAmount.toLocaleString()}
+                    </p>
                   </div>
                   <FiDollarSign className="text-4xl opacity-80" />
                 </div>
@@ -1871,9 +3812,13 @@ const AdminDashboard = () => {
               <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white p-6 rounded-lg shadow-md">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-yellow-100 text-sm font-medium">Pending</p>
+                    <p className="text-yellow-100 text-sm font-medium">
+                      Pending
+                    </p>
                     <p className="text-3xl font-bold mt-1">{pendingFines}</p>
-                    <p className="text-yellow-100 text-sm mt-1">₹{pendingAmount.toLocaleString()}</p>
+                    <p className="text-yellow-100 text-sm mt-1">
+                      ₹{pendingAmount.toLocaleString()}
+                    </p>
                   </div>
                   <FiDollarSign className="text-4xl opacity-80" />
                 </div>
@@ -1883,7 +3828,9 @@ const AdminDashboard = () => {
                   <div>
                     <p className="text-red-100 text-sm font-medium">Overdue</p>
                     <p className="text-3xl font-bold mt-1">{overdueFines}</p>
-                    <p className="text-red-100 text-sm mt-1">₹{overdueAmount.toLocaleString()}</p>
+                    <p className="text-red-100 text-sm mt-1">
+                      ₹{overdueAmount.toLocaleString()}
+                    </p>
                   </div>
                   <FiDollarSign className="text-4xl opacity-80" />
                 </div>
@@ -1891,11 +3838,19 @@ const AdminDashboard = () => {
             </div>
 
             {showFineForm && (
-              <form onSubmit={handleSubmitFine} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingFine ? 'Edit Fine' : 'Add Fine'}</h3>
+              <form
+                onSubmit={handleSubmitFine}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingFine ? "Edit Fine" : "Add Fine"}
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="relative">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Select Student (Roll/Enrollment Number) <span className="text-red-500">*</span></label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Select Student (Roll/Enrollment Number){" "}
+                      <span className="text-red-500">*</span>
+                    </label>
                     {/* Hidden required input for form validation */}
                     <input
                       type="hidden"
@@ -1910,29 +3865,45 @@ const AdminDashboard = () => {
                         setFineStudentSearchQuery(e.target.value);
                         if (!e.target.value) {
                           setFineSearchResults([]);
-                          setFineForm({...fineForm, selectedStudent: '', studentName: ''});
+                          setFineForm({
+                            ...fineForm,
+                            selectedStudent: "",
+                            studentName: "",
+                          });
                         }
                       }}
                       className="w-full px-4 py-2 border rounded-lg"
                     />
-                    {(fineSearchResults.length > 0 || (fineStudentSearchQuery && fineSearchResults.length === 0 && fineStudentSearchQuery.length >= 2)) && (
+                    {(fineSearchResults.length > 0 ||
+                      (fineStudentSearchQuery &&
+                        fineSearchResults.length === 0 &&
+                        fineStudentSearchQuery.length >= 2)) && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {fineSearchResults.length > 0 ? (
                           fineSearchResults.map((s) => (
                             <div
                               key={s._id}
                               onClick={() => {
-                                setFineForm({...fineForm, selectedStudent: s._id, studentName: s.studentName});
-                                setFineStudentSearchQuery(`${s.rollNumber || 'N/A'} / ${s.enrollmentNumber} - ${s.studentName}`);
+                                setFineForm({
+                                  ...fineForm,
+                                  selectedStudent: s._id,
+                                  studentName: s.studentName,
+                                });
+                                setFineStudentSearchQuery(
+                                  `${s.rollNumber || "N/A"} / ${s.enrollmentNumber} - ${s.studentName}`,
+                                );
                                 setFineSearchResults([]);
                               }}
                               className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                             >
-                              {s.rollNumber || 'N/A'} / {s.enrollmentNumber} - {s.studentName} ({s.class || 'N/A'})
+                              {s.rollNumber || "N/A"} / {s.enrollmentNumber} -{" "}
+                              {s.studentName} ({s.class || "N/A"})
                             </div>
                           ))
                         ) : (
-                          <div className="px-4 py-2 text-gray-500">No students found</div>
+                          <div className="px-4 py-2 text-gray-500">
+                            No students found
+                          </div>
                         )}
                       </div>
                     )}
@@ -1940,8 +3911,14 @@ const AdminDashboard = () => {
                       <select
                         value={fineForm.selectedStudent}
                         onChange={(e) => {
-                          const student = students.find(s => s._id === e.target.value);
-                          setFineForm({...fineForm, selectedStudent: e.target.value, studentName: student ? student.studentName : ''});
+                          const student = students.find(
+                            (s) => s._id === e.target.value,
+                          );
+                          setFineForm({
+                            ...fineForm,
+                            selectedStudent: e.target.value,
+                            studentName: student ? student.studentName : "",
+                          });
                         }}
                         required
                         className="w-full px-4 py-2 border rounded-lg mt-2"
@@ -1949,7 +3926,8 @@ const AdminDashboard = () => {
                         <option value="">Or select from list</option>
                         {students.map((s) => (
                           <option key={s._id} value={s._id}>
-                            {s.rollNumber || 'N/A'} / {s.enrollmentNumber} - {s.studentName} ({s.class || 'N/A'})
+                            {s.rollNumber || "N/A"} / {s.enrollmentNumber} -{" "}
+                            {s.studentName} ({s.class || "N/A"})
                           </option>
                         ))}
                       </select>
@@ -1957,15 +3935,26 @@ const AdminDashboard = () => {
                   </div>
                   {fineForm.studentName && (
                     <div>
-                      <label className="block text-sm text-neutral-3/70 mb-1">Student Name</label>
-                      <input type="text" value={fineForm.studentName} disabled className="w-full px-4 py-2 border rounded-lg bg-gray-100" />
+                      <label className="block text-sm text-neutral-3/70 mb-1">
+                        Student Name
+                      </label>
+                      <input
+                        type="text"
+                        value={fineForm.studentName}
+                        disabled
+                        className="w-full px-4 py-2 border rounded-lg bg-gray-100"
+                      />
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Fine Type <span className="text-red-500">*</span></label>
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Fine Type <span className="text-red-500">*</span>
+                    </label>
                     <select
                       value={fineForm.fineType}
-                      onChange={(e) => setFineForm({...fineForm, fineType: e.target.value})}
+                      onChange={(e) =>
+                        setFineForm({ ...fineForm, fineType: e.target.value })
+                      }
                       required
                       className="w-full px-4 py-2 border rounded-lg"
                     >
@@ -1974,61 +3963,132 @@ const AdminDashboard = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Fine Amount (₹) <span className="text-red-500">*</span></label>
-                    <input type="number" placeholder="Enter amount" value={fineForm.amount} onChange={(e) => setFineForm({...fineForm, amount: e.target.value})} required min="0" step="0.01" className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Fine Amount (₹) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Enter amount"
+                      value={fineForm.amount}
+                      onChange={(e) =>
+                        setFineForm({ ...fineForm, amount: e.target.value })
+                      }
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Due Date <span className="text-red-500">*</span></label>
-                    <input type="date" value={fineForm.dueDate} onChange={(e) => setFineForm({...fineForm, dueDate: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Due Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={fineForm.dueDate}
+                      onChange={(e) =>
+                        setFineForm({ ...fineForm, dueDate: e.target.value })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Reason <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="Enter reason for fine" value={fineForm.reason} onChange={(e) => setFineForm({...fineForm, reason: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Reason <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter reason for fine"
+                      value={fineForm.reason}
+                      onChange={(e) =>
+                        setFineForm({ ...fineForm, reason: e.target.value })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Remarks (Optional)</label>
-                    <textarea value={fineForm.remarks} onChange={(e) => setFineForm({...fineForm, remarks: e.target.value})} placeholder="Additional notes or remarks" className="w-full px-4 py-2 border rounded-lg" rows="2" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Remarks (Optional)
+                    </label>
+                    <textarea
+                      value={fineForm.remarks}
+                      onChange={(e) =>
+                        setFineForm({ ...fineForm, remarks: e.target.value })
+                      }
+                      placeholder="Additional notes or remarks"
+                      className="w-full px-4 py-2 border rounded-lg"
+                      rows="2"
+                    />
                   </div>
                 </div>
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition">{editingFine ? 'Update Fine' : 'Save Fine'}</button>
-                  <button type="button" onClick={() => {
-                    setShowFineForm(false);
-                    setEditingFine(null);
-                    setFineForm({
-                      selectedStudent: '', studentName: '', amount: '', reason: '', dueDate: '', remarks: '', fineType: 'other'
-                    });
-                    setFineStudentSearchQuery('');
-                    setFineSearchResults([]);
-                  }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg hover:bg-neutral-1/80 transition">Cancel</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
+                  >
+                    {editingFine ? "Update Fine" : "Save Fine"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFineForm(false);
+                      setEditingFine(null);
+                      setFineForm({
+                        selectedStudent: "",
+                        studentName: "",
+                        amount: "",
+                        reason: "",
+                        dueDate: "",
+                        remarks: "",
+                        fineType: "other",
+                      });
+                      setFineStudentSearchQuery("");
+                      setFineSearchResults([]);
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg hover:bg-neutral-1/80 transition"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </form>
             )}
 
             {/* Filter Options */}
             <div className="bg-neutral-2 rounded-lg shadow-md p-6 mb-6">
-              <h3 className="text-lg font-semibold text-neutral-3 mb-4">Filter Fines</h3>
+              <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                Filter Fines
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Filter by Class</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Filter by Class
+                  </label>
                   <select
                     value={fineFilters.class}
-                    onChange={(e) => setFineFilters({...fineFilters, class: e.target.value})}
+                    onChange={(e) =>
+                      setFineFilters({ ...fineFilters, class: e.target.value })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">All Classes</option>
                     {classes.map((c) => (
                       <option key={c._id} value={c.className}>
-                        {c.className} {c.section ? `- ${c.section}` : ''}
+                        {c.className} {c.section ? `- ${c.section}` : ""}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Filter by Status</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Filter by Status
+                  </label>
                   <select
                     value={fineFilters.status}
-                    onChange={(e) => setFineFilters({...fineFilters, status: e.target.value})}
+                    onChange={(e) =>
+                      setFineFilters({ ...fineFilters, status: e.target.value })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">All Status</option>
@@ -2038,10 +4098,17 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Filter by Fine Type</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Filter by Fine Type
+                  </label>
                   <select
                     value={fineFilters.fineType}
-                    onChange={(e) => setFineFilters({...fineFilters, fineType: e.target.value})}
+                    onChange={(e) =>
+                      setFineFilters({
+                        ...fineFilters,
+                        fineType: e.target.value,
+                      })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">All Types</option>
@@ -2050,19 +4117,33 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Search Student</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Search Student
+                  </label>
                   <input
                     type="text"
                     placeholder="Search by student name"
                     value={fineFilters.studentSearch}
-                    onChange={(e) => setFineFilters({...fineFilters, studentSearch: e.target.value})}
+                    onChange={(e) =>
+                      setFineFilters({
+                        ...fineFilters,
+                        studentSearch: e.target.value,
+                      })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   />
                 </div>
               </div>
               <div className="mt-4 flex justify-end">
                 <button
-                  onClick={() => setFineFilters({ class: '', status: '', fineType: '', studentSearch: '' })}
+                  onClick={() =>
+                    setFineFilters({
+                      class: "",
+                      status: "",
+                      fineType: "",
+                      studentSearch: "",
+                    })
+                  }
                   className="px-4 py-2 bg-neutral-1 text-neutral-3 rounded-lg hover:bg-neutral-1/80 transition"
                 >
                   Clear Filters
@@ -2075,7 +4156,9 @@ const AdminDashboard = () => {
                 <div className="p-8 text-center text-neutral-3/70">
                   <FiDollarSign className="text-5xl mx-auto mb-4 opacity-50" />
                   <p className="text-lg">No fines found</p>
-                  <p className="text-sm mt-2">Try adjusting your filters or add a new fine</p>
+                  <p className="text-sm mt-2">
+                    Try adjusting your filters or add a new fine
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -2095,44 +4178,86 @@ const AdminDashboard = () => {
                     </thead>
                     <tbody>
                       {filteredFines.map((f) => {
-                        const student = students.find(s => s._id === (f.studentId?._id || f.studentId));
+                        const student = students.find(
+                          (s) => s._id === (f.studentId?._id || f.studentId),
+                        );
                         return (
-                          <tr key={f._id} className="border-b border-neutral-1 hover:bg-neutral-1/50 transition">
-                            <td className="px-4 py-3 text-neutral-3 font-medium">{f.studentId?.studentName || student?.studentName || 'N/A'}</td>
-                            <td className="px-4 py-3 text-neutral-3">{student?.class || 'N/A'}</td>
-                            <td className="px-4 py-3 text-neutral-3">{student?.rollNumber || 'N/A'}</td>
+                          <tr
+                            key={f._id}
+                            className="border-b border-neutral-1 hover:bg-neutral-1/50 transition"
+                          >
+                            <td className="px-4 py-3 text-neutral-3 font-medium">
+                              {f.studentId?.studentName ||
+                                student?.studentName ||
+                                "N/A"}
+                            </td>
+                            <td className="px-4 py-3 text-neutral-3">
+                              {student?.class || "N/A"}
+                            </td>
+                            <td className="px-4 py-3 text-neutral-3">
+                              {student?.rollNumber || "N/A"}
+                            </td>
                             <td className="px-4 py-3">
-                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                f.fineType === 'late' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-gray-100 text-gray-800 border border-gray-300'
-                              }`}>
-                                {f.fineType === 'late' ? 'Late Fine' : 'Other'}
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  f.fineType === "late"
+                                    ? "bg-red-100 text-red-800 border border-red-300"
+                                    : "bg-gray-100 text-gray-800 border border-gray-300"
+                                }`}
+                              >
+                                {f.fineType === "late" ? "Late Fine" : "Other"}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-neutral-3 font-semibold text-lg">₹{f.amount.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-neutral-3 max-w-xs truncate" title={f.reason}>{f.reason}</td>
+                            <td className="px-4 py-3 text-neutral-3 font-semibold text-lg">
+                              ₹{f.amount.toLocaleString()}
+                            </td>
+                            <td
+                              className="px-4 py-3 text-neutral-3 max-w-xs truncate"
+                              title={f.reason}
+                            >
+                              {f.reason}
+                            </td>
                             <td className="px-4 py-3 text-neutral-3">
                               <div className="flex flex-col">
-                                <span>{new Date(f.dueDate).toLocaleDateString()}</span>
-                                {new Date(f.dueDate) < new Date() && f.status !== 'paid' && (
-                                  <span className="text-xs text-red-600 font-semibold">Overdue</span>
-                                )}
+                                <span>
+                                  {formatDateDDMMYYYY(f.dueDate)}
+                                </span>
+                                {new Date(f.dueDate) < new Date() &&
+                                  f.status !== "paid" && (
+                                    <span className="text-xs text-red-600 font-semibold">
+                                      Overdue
+                                    </span>
+                                  )}
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                f.status === 'paid' ? 'bg-green-100 text-green-800 border border-green-300' :
-                                f.status === 'overdue' ? 'bg-red-100 text-red-800 border border-red-300' :
-                                'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                              }`}>
-                                {f.status.charAt(0).toUpperCase() + f.status.slice(1)}
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  f.status === "paid"
+                                    ? "bg-green-100 text-green-800 border border-green-300"
+                                    : f.status === "overdue"
+                                      ? "bg-red-100 text-red-800 border border-red-300"
+                                      : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+                                }`}
+                              >
+                                {f.status.charAt(0).toUpperCase() +
+                                  f.status.slice(1)}
                               </span>
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex space-x-2">
-                                <button onClick={() => handleEditFine(f)} className="text-secondary hover:text-secondary-600 p-1 rounded hover:bg-secondary/10 transition" title="Edit Fine">
+                                <button
+                                  onClick={() => handleEditFine(f)}
+                                  className="text-secondary hover:text-secondary-600 p-1 rounded hover:bg-secondary/10 transition"
+                                  title="Edit Fine"
+                                >
                                   <FiEdit />
                                 </button>
-                                <button onClick={() => handleDelete('fine', f._id)} className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition" title="Delete Fine">
+                                <button
+                                  onClick={() => handleDelete("fine", f._id)}
+                                  className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition"
+                                  title="Delete Fine"
+                                >
                                   <FiTrash2 />
                                 </button>
                               </div>
@@ -2148,26 +4273,44 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'classTeachers':
+      case "classTeachers":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-neutral-3">Class Teachers</h2>
-              <button onClick={() => {
-                setClassTeacherForm({ teacherId: '', className: '', section: '' });
-                setEditingClassTeacher(null);
-                setTeacherSearchQuery('');
-                setTeacherSearchResults([]);
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Class Teachers
+              </h2>
+              <button
+                onClick={() => {
+                  setClassTeacherForm({
+                    teacherId: "",
+                    className: "",
+                    section: "",
+                  });
+                  setEditingClassTeacher(null);
+                  setTeacherSearchQuery("");
+                  setTeacherSearchResults([]);
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiUserPlus />
                 <span>Assign Class Teacher</span>
               </button>
             </div>
-            <form onSubmit={handleSubmitClassTeacher} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-              <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingClassTeacher ? 'Edit Class Teacher' : 'Assign Class Teacher'}</h3>
+            <form
+              onSubmit={handleSubmitClassTeacher}
+              className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+            >
+              <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                {editingClassTeacher
+                  ? "Edit Class Teacher"
+                  : "Assign Class Teacher"}
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="relative">
-                  <label className="block text-sm text-neutral-3/70 mb-1">Select Teacher</label>
+                  <label className="block text-sm text-neutral-3/70 mb-1">
+                    Select Teacher
+                  </label>
                   <input
                     type="text"
                     placeholder="Search by name, email, or phone"
@@ -2176,19 +4319,28 @@ const AdminDashboard = () => {
                       setTeacherSearchQuery(e.target.value);
                       if (!e.target.value) {
                         setTeacherSearchResults([]);
-                        setClassTeacherForm({...classTeacherForm, teacherId: ''});
+                        setClassTeacherForm({
+                          ...classTeacherForm,
+                          teacherId: "",
+                        });
                       }
                     }}
                     className="w-full px-4 py-2 border rounded-lg"
                   />
-                  {(teacherSearchResults.length > 0 || (teacherSearchQuery && teacherSearchResults.length === 0 && teacherSearchQuery.length >= 2)) && (
+                  {(teacherSearchResults.length > 0 ||
+                    (teacherSearchQuery &&
+                      teacherSearchResults.length === 0 &&
+                      teacherSearchQuery.length >= 2)) && (
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                       {teacherSearchResults.length > 0 ? (
                         teacherSearchResults.map((t) => (
                           <div
                             key={t._id}
                             onClick={() => {
-                              setClassTeacherForm({...classTeacherForm, teacherId: t._id});
+                              setClassTeacherForm({
+                                ...classTeacherForm,
+                                teacherId: t._id,
+                              });
                               setTeacherSearchQuery(`${t.name} (${t.email})`);
                               setTeacherSearchResults([]);
                             }}
@@ -2198,57 +4350,97 @@ const AdminDashboard = () => {
                           </div>
                         ))
                       ) : (
-                        <div className="px-4 py-2 text-gray-500">No teachers found</div>
+                        <div className="px-4 py-2 text-gray-500">
+                          No teachers found
+                        </div>
                       )}
                     </div>
                   )}
                   {!teacherSearchQuery && (
                     <select
                       value={classTeacherForm.teacherId}
-                      onChange={(e) => setClassTeacherForm({...classTeacherForm, teacherId: e.target.value})}
+                      onChange={(e) =>
+                        setClassTeacherForm({
+                          ...classTeacherForm,
+                          teacherId: e.target.value,
+                        })
+                      }
                       required
                       className="w-full px-4 py-2 border rounded-lg mt-2"
                     >
                       <option value="">Or select from list</option>
                       {teachers.map((t) => (
-                        <option key={t._id} value={t._id}>{t.name} ({t.email})</option>
+                        <option key={t._id} value={t._id}>
+                          {t.name} ({t.email})
+                        </option>
                       ))}
                     </select>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-1">Select Class</label>
+                  <label className="block text-sm text-neutral-3/70 mb-1">
+                    Select Class
+                  </label>
                   <select
                     value={classTeacherForm.className}
-                    onChange={(e) => setClassTeacherForm({...classTeacherForm, className: e.target.value})}
+                    onChange={(e) =>
+                      setClassTeacherForm({
+                        ...classTeacherForm,
+                        className: e.target.value,
+                      })
+                    }
                     required
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">Select Class</option>
                     {classes.map((c) => (
-                      <option key={c._id} value={c.className}>{c.className} {c.section ? `- ${c.section}` : ''}</option>
+                      <option key={c._id} value={c.className}>
+                        {c.className} {c.section ? `- ${c.section}` : ""}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-1">Section (Optional)</label>
+                  <label className="block text-sm text-neutral-3/70 mb-1">
+                    Section (Optional)
+                  </label>
                   <input
                     type="text"
                     placeholder="Section"
                     value={classTeacherForm.section}
-                    onChange={(e) => setClassTeacherForm({...classTeacherForm, section: e.target.value})}
+                    onChange={(e) =>
+                      setClassTeacherForm({
+                        ...classTeacherForm,
+                        section: e.target.value,
+                      })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   />
                 </div>
               </div>
               <div className="flex space-x-2">
-                <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingClassTeacher ? 'Update' : 'Assign Class Teacher'}</button>
-                <button type="button" onClick={() => {
-                  setClassTeacherForm({ teacherId: '', className: '', section: '' });
-                  setEditingClassTeacher(null);
-                  setTeacherSearchQuery('');
-                  setTeacherSearchResults([]);
-                }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Clear</button>
+                <button
+                  type="submit"
+                  className="bg-primary text-white px-4 py-2 rounded-lg"
+                >
+                  {editingClassTeacher ? "Update" : "Assign Class Teacher"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClassTeacherForm({
+                      teacherId: "",
+                      className: "",
+                      section: "",
+                    });
+                    setEditingClassTeacher(null);
+                    setTeacherSearchQuery("");
+                    setTeacherSearchResults([]);
+                  }}
+                  className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                >
+                  Clear
+                </button>
               </div>
             </form>
             <div className="bg-neutral-2 rounded-lg shadow-md overflow-hidden">
@@ -2264,19 +4456,41 @@ const AdminDashboard = () => {
                 </thead>
                 <tbody>
                   {classTeachers.map((ct) => {
-                    const studentCount = students.filter(s => s.class === ct.className).length;
+                    const studentCount = students.filter(
+                      (s) => s.class === ct.className,
+                    ).length;
                     return (
                       <tr key={ct._id} className="border-b border-neutral-1">
-                        <td className="px-4 py-3 text-neutral-3">{ct.teacherId?.name || 'N/A'}</td>
-                        <td className="px-4 py-3 text-neutral-3">{ct.className}</td>
-                      <td className="px-4 py-3 text-neutral-3">{ct.section || 'N/A'}</td>
-                      <td className="px-4 py-3 text-neutral-3 font-semibold">{studentCount}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex space-x-2">
-                          <button onClick={() => handleEditClassTeacher(ct)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                          <button onClick={() => handleDelete('classTeacher', ct._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
-                        </div>
-                      </td>
+                        <td className="px-4 py-3 text-neutral-3">
+                          {ct.teacherId?.name || "N/A"}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-3">
+                          {ct.className}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-3">
+                          {ct.section || "N/A"}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-3 font-semibold">
+                          {studentCount}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleEditClassTeacher(ct)}
+                              className="text-secondary hover:text-secondary-600"
+                            >
+                              <FiEdit />
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleDelete("classTeacher", ct._id)
+                              }
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <FiTrash2 />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -2286,52 +4500,89 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'enrollmentNumbers':
+      case "enrollmentNumbers":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-neutral-3">Enrollment Numbers</h2>
-              <button onClick={() => {
-                setEnrollmentForm({ enrollmentNumber: '', name: '' });
-                setEditingEnrollment(null);
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Enrollment Numbers
+              </h2>
+              <button
+                onClick={() => {
+                  setEnrollmentForm({ enrollmentNumber: "", name: "" });
+                  setEditingEnrollment(null);
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiUserPlus />
                 <span>Add Enrollment Number</span>
               </button>
             </div>
-            <form onSubmit={handleSubmitEnrollment} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-              <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingEnrollment ? 'Edit Enrollment Number' : 'Add Enrollment Number'}</h3>
+            <form
+              onSubmit={handleSubmitEnrollment}
+              className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+            >
+              <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                {editingEnrollment
+                  ? "Edit Enrollment Number"
+                  : "Add Enrollment Number"}
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-1">Enrollment Number</label>
+                  <label className="block text-sm text-neutral-3/70 mb-1">
+                    Enrollment Number
+                  </label>
                   <input
                     type="text"
                     placeholder="Enter enrollment number"
                     value={enrollmentForm.enrollmentNumber}
-                    onChange={(e) => setEnrollmentForm({...enrollmentForm, enrollmentNumber: e.target.value})}
+                    onChange={(e) =>
+                      setEnrollmentForm({
+                        ...enrollmentForm,
+                        enrollmentNumber: e.target.value,
+                      })
+                    }
                     required
                     disabled={editingEnrollment?.isUsed}
-                    className={`w-full px-4 py-2 border rounded-lg ${editingEnrollment?.isUsed ? 'bg-gray-100' : ''}`}
+                    className={`w-full px-4 py-2 border rounded-lg ${editingEnrollment?.isUsed ? "bg-gray-100" : ""}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-1">Name</label>
+                  <label className="block text-sm text-neutral-3/70 mb-1">
+                    Name
+                  </label>
                   <input
                     type="text"
                     placeholder="Enter student name"
                     value={enrollmentForm.name}
-                    onChange={(e) => setEnrollmentForm({...enrollmentForm, name: e.target.value})}
+                    onChange={(e) =>
+                      setEnrollmentForm({
+                        ...enrollmentForm,
+                        name: e.target.value,
+                      })
+                    }
                     required
                     className="w-full px-4 py-2 border rounded-lg"
                   />
                 </div>
               </div>
               <div className="flex space-x-2">
-                <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingEnrollment ? 'Update' : 'Add Enrollment Number'}</button>
-                <button type="button" onClick={() => {
-                  setEnrollmentForm({ enrollmentNumber: '', name: '' });
-                  setEditingEnrollment(null);
-                }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Clear</button>
+                <button
+                  type="submit"
+                  className="bg-primary text-white px-4 py-2 rounded-lg"
+                >
+                  {editingEnrollment ? "Update" : "Add Enrollment Number"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnrollmentForm({ enrollmentNumber: "", name: "" });
+                    setEditingEnrollment(null);
+                  }}
+                  className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                >
+                  Clear
+                </button>
               </div>
             </form>
             <div className="bg-neutral-2 rounded-lg shadow-md overflow-hidden">
@@ -2348,20 +4599,40 @@ const AdminDashboard = () => {
                 <tbody>
                   {enrollmentNumbers.map((en) => (
                     <tr key={en._id} className="border-b border-neutral-1">
-                      <td className="px-4 py-3 text-neutral-3 font-semibold">{en.enrollmentNumber}</td>
+                      <td className="px-4 py-3 text-neutral-3 font-semibold">
+                        {en.enrollmentNumber}
+                      </td>
                       <td className="px-4 py-3 text-neutral-3">{en.name}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          en.isUsed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {en.isUsed ? 'Used' : 'Available'}
+                        <span
+                          className={`px-2 py-1 rounded text-xs ${
+                            en.isUsed
+                              ? "bg-green-100 text-green-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
+                        >
+                          {en.isUsed ? "Used" : "Available"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-neutral-3">{en.usedBy?.name || 'N/A'}</td>
+                      <td className="px-4 py-3 text-neutral-3">
+                        {en.usedBy?.name || "N/A"}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex space-x-2">
-                          <button onClick={() => handleEditEnrollment(en)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                          <button onClick={() => handleDelete('enrollmentNumber', en._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
+                          <button
+                            onClick={() => handleEditEnrollment(en)}
+                            className="text-secondary hover:text-secondary-600"
+                          >
+                            <FiEdit />
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleDelete("enrollmentNumber", en._id)
+                            }
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <FiTrash2 />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -2372,84 +4643,262 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'addTeacher':
+      case "addTeacher":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-neutral-3">Add Teacher/Accountant</h2>
-              <button onClick={() => {
-                setShowTeacherForm(!showTeacherForm);
-                if (!showTeacherForm) {
-                  setEditingTeacher(null);
-                  setTeacherForm({
-                    name: '', email: '', password: '', phone: '', address: '', qualification: '',
-                    experience: '', specialization: '', otherDetails: '', role: 'teacher'
-                  });
-                }
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Add Teacher/Accountant
+              </h2>
+              <button
+                onClick={() => {
+                  setShowTeacherForm(!showTeacherForm);
+                  if (!showTeacherForm) {
+                    setEditingTeacher(null);
+                    setTeacherForm({
+                      name: "",
+                      email: "",
+                      password: "",
+                      phone: "",
+                      address: "",
+                      qualification: "",
+                      experience: "",
+                      specialization: "",
+                      otherDetails: "",
+                      role: "teacher",
+                    });
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiUserPlus />
-                <span>{showTeacherForm ? 'Cancel' : 'Add Teacher/Accountant'}</span>
+                <span>
+                  {showTeacherForm ? "Cancel" : "Add Teacher/Accountant"}
+                </span>
               </button>
             </div>
             {showTeacherForm && (
-              <form onSubmit={handleSubmitTeacher} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingTeacher ? 'Edit Teacher/Accountant' : 'Add Teacher/Accountant'}</h3>
+              <form
+                onSubmit={handleSubmitTeacher}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingTeacher
+                    ? "Edit Teacher/Accountant"
+                    : "Add Teacher/Accountant"}
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Name <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="Full Name" value={teacherForm.name} onChange={(e) => setTeacherForm({...teacherForm, name: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Full Name"
+                      value={teacherForm.name}
+                      onChange={(e) =>
+                        setTeacherForm({ ...teacherForm, name: e.target.value })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Email <span className="text-red-500">*</span></label>
-                    <input type="email" placeholder="Email Address" value={teacherForm.email} onChange={(e) => setTeacherForm({...teacherForm, email: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Email <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="Email Address"
+                      value={teacherForm.email}
+                      onChange={(e) =>
+                        setTeacherForm({
+                          ...teacherForm,
+                          email: e.target.value,
+                        })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Password {!editingTeacher && <span className="text-red-500">*</span>}</label>
-                    <input type="password" placeholder={editingTeacher ? "Leave blank to keep current password" : "Password"} value={teacherForm.password} onChange={(e) => setTeacherForm({...teacherForm, password: e.target.value})} required={!editingTeacher} className="w-full px-4 py-2 border rounded-lg" />
-                    {editingTeacher && <p className="text-xs text-neutral-3/50 mt-1">Leave blank to keep current password</p>}
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Password{" "}
+                      {!editingTeacher && (
+                        <span className="text-red-500">*</span>
+                      )}
+                    </label>
+                    <input
+                      type="password"
+                      placeholder={
+                        editingTeacher
+                          ? "Leave blank to keep current password"
+                          : "Password"
+                      }
+                      value={teacherForm.password}
+                      onChange={(e) =>
+                        setTeacherForm({
+                          ...teacherForm,
+                          password: e.target.value,
+                        })
+                      }
+                      required={!editingTeacher}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
+                    {editingTeacher && (
+                      <p className="text-xs text-neutral-3/50 mt-1">
+                        Leave blank to keep current password
+                      </p>
+                    )}
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Contact Number</label>
-                    <input type="tel" placeholder="Phone Number" value={teacherForm.phone} onChange={(e) => setTeacherForm({...teacherForm, phone: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Contact Number
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="Phone Number"
+                      value={teacherForm.phone}
+                      onChange={(e) =>
+                        setTeacherForm({
+                          ...teacherForm,
+                          phone: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Role <span className="text-red-500">*</span></label>
-                    <select value={teacherForm.role} onChange={(e) => setTeacherForm({...teacherForm, role: e.target.value})} required className="w-full px-4 py-2 border rounded-lg">
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Role <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={teacherForm.role}
+                      onChange={(e) =>
+                        setTeacherForm({ ...teacherForm, role: e.target.value })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    >
                       <option value="teacher">Teacher</option>
                       <option value="accountant">Accountant</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Qualification</label>
-                    <input type="text" placeholder="e.g., M.Sc, B.Ed" value={teacherForm.qualification} onChange={(e) => setTeacherForm({...teacherForm, qualification: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Qualification
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., M.Sc, B.Ed"
+                      value={teacherForm.qualification}
+                      onChange={(e) =>
+                        setTeacherForm({
+                          ...teacherForm,
+                          qualification: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Experience</label>
-                    <input type="text" placeholder="e.g., 5 years" value={teacherForm.experience} onChange={(e) => setTeacherForm({...teacherForm, experience: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Experience
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., 5 years"
+                      value={teacherForm.experience}
+                      onChange={(e) =>
+                        setTeacherForm({
+                          ...teacherForm,
+                          experience: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Specialization</label>
-                    <input type="text" placeholder="e.g., Mathematics, Science" value={teacherForm.specialization} onChange={(e) => setTeacherForm({...teacherForm, specialization: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Specialization
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Mathematics, Science"
+                      value={teacherForm.specialization}
+                      onChange={(e) =>
+                        setTeacherForm({
+                          ...teacherForm,
+                          specialization: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Address</label>
-                    <input type="text" placeholder="Address" value={teacherForm.address} onChange={(e) => setTeacherForm({...teacherForm, address: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Address"
+                      value={teacherForm.address}
+                      onChange={(e) =>
+                        setTeacherForm({
+                          ...teacherForm,
+                          address: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Other Details</label>
-                    <textarea placeholder="Additional information" value={teacherForm.otherDetails} onChange={(e) => setTeacherForm({...teacherForm, otherDetails: e.target.value})} className="w-full px-4 py-2 border rounded-lg" rows="3" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Other Details
+                    </label>
+                    <textarea
+                      placeholder="Additional information"
+                      value={teacherForm.otherDetails}
+                      onChange={(e) =>
+                        setTeacherForm({
+                          ...teacherForm,
+                          otherDetails: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                      rows="3"
+                    />
                   </div>
                 </div>
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingTeacher ? 'Update' : 'Add Teacher/Accountant'}</button>
-                  <button type="button" onClick={() => {
-                    setShowTeacherForm(false);
-                    setEditingTeacher(null);
-                    setTeacherForm({
-                      name: '', email: '', password: '', phone: '', address: '', qualification: '',
-                      experience: '', specialization: '', otherDetails: '', role: 'teacher'
-                    });
-                  }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Cancel</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingTeacher ? "Update" : "Add Teacher/Accountant"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTeacherForm(false);
+                      setEditingTeacher(null);
+                      setTeacherForm({
+                        name: "",
+                        email: "",
+                        password: "",
+                        phone: "",
+                        address: "",
+                        qualification: "",
+                        experience: "",
+                        specialization: "",
+                        otherDetails: "",
+                        role: "teacher",
+                      });
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </form>
             )}
@@ -2470,13 +4919,29 @@ const AdminDashboard = () => {
                     <tr key={t._id} className="border-b border-neutral-1">
                       <td className="px-4 py-3 text-neutral-3">{t.name}</td>
                       <td className="px-4 py-3 text-neutral-3">{t.email}</td>
-                      <td className="px-4 py-3 text-neutral-3">{t.phone || 'N/A'}</td>
-                      <td className="px-4 py-3 text-neutral-3 capitalize">{t.role}</td>
-                      <td className="px-4 py-3 text-neutral-3">{t.qualification || 'N/A'}</td>
+                      <td className="px-4 py-3 text-neutral-3">
+                        {t.phone || "N/A"}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-3 capitalize">
+                        {t.role}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-3">
+                        {t.qualification || "N/A"}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex space-x-2">
-                          <button onClick={() => handleEditTeacher(t)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                          <button onClick={() => handleDelete('teacher', t._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
+                          <button
+                            onClick={() => handleEditTeacher(t)}
+                            className="text-secondary hover:text-secondary-600"
+                          >
+                            <FiEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDelete("teacher", t._id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <FiTrash2 />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -2487,34 +4952,64 @@ const AdminDashboard = () => {
           </div>
         );
 
-      case 'students':
+      case "students":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-neutral-3">Students</h2>
-              <button onClick={() => {
-                setShowStudentForm(!showStudentForm);
-                setEditingStudent(null);
-                setStudentForm({
-                  studentName: '', fathersName: '', mothersName: '', address: '', class: '',
-                  rollNumber: '', enrollmentNumber: '', mobileNumber: '', studentType: 'dayScholar', busRoute: '', email: '', transportOpted: false
-                });
-                setEnrollmentDetails(null);
-      setEnrollmentLoading(false);
-              }} className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  setShowStudentForm(!showStudentForm);
+                  setEditingStudent(null);
+                  setStudentForm({
+                    studentName: "",
+                    fathersName: "",
+                    mothersName: "",
+                    address: "",
+                    class: "",
+                    rollNumber: "",
+                    enrollmentNumber: "",
+                    mobileNumber: "",
+                    studentType: "dayScholar",
+                    busRoute: "",
+                    email: "",
+                    transportOpted: false,
+                  });
+                  setEnrollmentDetails(null);
+                  setEnrollmentLoading(false);
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
                 <FiUserPlus />
                 <span>Add Student</span>
               </button>
             </div>
             {showStudentForm && (
-              <form onSubmit={handleSubmitStudent} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingStudent ? 'Edit Student' : 'Add Student'}</h3>
+              <form
+                onSubmit={handleSubmitStudent}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingStudent ? "Edit Student" : "Add Student"}
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="relative">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Enrollment Number <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="Enter Enrollment Number" value={studentForm.enrollmentNumber} onChange={(e) => {
-                      setStudentForm({...studentForm, enrollmentNumber: e.target.value});
-                    }} required className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Enrollment Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter Enrollment Number"
+                      value={studentForm.enrollmentNumber}
+                      onChange={(e) => {
+                        setStudentForm({
+                          ...studentForm,
+                          enrollmentNumber: e.target.value,
+                        });
+                      }}
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                     {enrollmentLoading && (
                       <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                         <p className="text-sm text-gray-600">Searching...</p>
@@ -2525,32 +5020,45 @@ const AdminDashboard = () => {
                         <div className="flex items-start space-x-2">
                           <span className="text-blue-600">✓</span>
                           <div className="flex-1">
-                            <p className="text-sm text-blue-800 font-semibold mb-2">Enrollment Number Found</p>
+                            <p className="text-sm text-blue-800 font-semibold mb-2">
+                              Enrollment Number Found
+                            </p>
                             <div className="space-y-1 text-sm">
                               <p className="text-blue-700">
-                                <span className="font-medium">Enrollment Number:</span> {enrollmentDetails.enrollmentNumber}
+                                <span className="font-medium">
+                                  Enrollment Number:
+                                </span>{" "}
+                                {enrollmentDetails.enrollmentNumber}
                               </p>
                               <p className="text-blue-700">
-                                <span className="font-medium">Name:</span> {enrollmentDetails.name || 'No name associated'}
+                                <span className="font-medium">Name:</span>{" "}
+                                {enrollmentDetails.name || "No name associated"}
                               </p>
                               <p className="text-blue-700">
-                                <span className="font-medium">Status:</span> 
-                                <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                                  enrollmentDetails.isUsed 
-                                    ? 'bg-orange-100 text-orange-800' 
-                                    : 'bg-green-100 text-green-800'
-                                }`}>
-                                  {enrollmentDetails.isUsed ? 'Used' : 'Available'}
+                                <span className="font-medium">Status:</span>
+                                <span
+                                  className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                                    enrollmentDetails.isUsed
+                                      ? "bg-orange-100 text-orange-800"
+                                      : "bg-green-100 text-green-800"
+                                  }`}
+                                >
+                                  {enrollmentDetails.isUsed
+                                    ? "Used"
+                                    : "Available"}
                                 </span>
                               </p>
                               {enrollmentDetails.usedBy && (
                                 <p className="text-blue-700">
-                                  <span className="font-medium">Used By:</span> {enrollmentDetails.usedBy.name} ({enrollmentDetails.usedBy.email})
+                                  <span className="font-medium">Used By:</span>{" "}
+                                  {enrollmentDetails.usedBy.name} (
+                                  {enrollmentDetails.usedBy.email})
                                 </p>
                               )}
                               {enrollmentDetails.createdAt && (
                                 <p className="text-blue-600 text-xs mt-2">
-                                  Created: {new Date(enrollmentDetails.createdAt).toLocaleDateString()}
+                                  Created:{" "}
+                                  {formatDateDDMMYYYY(enrollmentDetails.createdAt)}
                                 </p>
                               )}
                             </div>
@@ -2558,72 +5066,240 @@ const AdminDashboard = () => {
                         </div>
                       </div>
                     )}
-                    {!enrollmentLoading && studentForm.enrollmentNumber && !enrollmentDetails && (
-                      <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                        <p className="text-sm text-gray-600">Enrollment number not found in database</p>
-                      </div>
-                    )}
+                    {!enrollmentLoading &&
+                      studentForm.enrollmentNumber &&
+                      !enrollmentDetails && (
+                        <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                          <p className="text-sm text-gray-600">
+                            Enrollment number not found in database
+                          </p>
+                        </div>
+                      )}
                   </div>
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Student Name <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="Student Name (Auto-filled from enrollment)" value={studentForm.studentName} onChange={(e) => setStudentForm({...studentForm, studentName: e.target.value})} required className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Student Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Student Name (Auto-filled from enrollment)"
+                      value={studentForm.studentName}
+                      onChange={(e) =>
+                        setStudentForm({
+                          ...studentForm,
+                          studentName: e.target.value,
+                        })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
-                  <input type="text" placeholder="Father's Name" value={studentForm.fathersName} onChange={(e) => setStudentForm({...studentForm, fathersName: e.target.value})} required className="px-4 py-2 border rounded-lg" />
-                  <input type="text" placeholder="Mother's Name" value={studentForm.mothersName} onChange={(e) => setStudentForm({...studentForm, mothersName: e.target.value})} required className="px-4 py-2 border rounded-lg" />
-                  <input type="text" placeholder="Address" value={studentForm.address} onChange={(e) => setStudentForm({...studentForm, address: e.target.value})} required className="px-4 py-2 border rounded-lg" />
+                  <input
+                    type="text"
+                    placeholder="Father's Name"
+                    value={studentForm.fathersName}
+                    onChange={(e) =>
+                      setStudentForm({
+                        ...studentForm,
+                        fathersName: e.target.value,
+                      })
+                    }
+                    required
+                    className="px-4 py-2 border rounded-lg"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Mother's Name"
+                    value={studentForm.mothersName}
+                    onChange={(e) =>
+                      setStudentForm({
+                        ...studentForm,
+                        mothersName: e.target.value,
+                      })
+                    }
+                    required
+                    className="px-4 py-2 border rounded-lg"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Address"
+                    value={studentForm.address}
+                    onChange={(e) =>
+                      setStudentForm({
+                        ...studentForm,
+                        address: e.target.value,
+                      })
+                    }
+                    required
+                    className="px-4 py-2 border rounded-lg"
+                  />
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Class</label>
-                    <select value={studentForm.class} onChange={(e) => setStudentForm({...studentForm, class: e.target.value})} required className="w-full px-4 py-2 border rounded-lg">
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Class
+                    </label>
+                    <select
+                      value={studentForm.class}
+                      onChange={(e) =>
+                        setStudentForm({
+                          ...studentForm,
+                          class: e.target.value,
+                        })
+                      }
+                      required
+                      className="w-full px-4 py-2 border rounded-lg"
+                    >
                       <option value="">Select Class</option>
                       {classes.map((c) => (
-                        <option key={c._id} value={c.className}>{c.className} {c.section ? `- ${c.section}` : ''}</option>
+                        <option key={c._id} value={c.className}>
+                          {c.className} {c.section ? `- ${c.section}` : ""}
+                        </option>
                       ))}
                     </select>
                   </div>
-                  <input type="text" placeholder="Roll Number" value={studentForm.rollNumber} onChange={(e) => setStudentForm({...studentForm, rollNumber: e.target.value})} required className="px-4 py-2 border rounded-lg" />
-                  <input type="tel" placeholder="Mobile Number" value={studentForm.mobileNumber} onChange={(e) => setStudentForm({...studentForm, mobileNumber: e.target.value})} required className="px-4 py-2 border rounded-lg" />
+                  <input
+                    type="text"
+                    placeholder="Roll Number"
+                    value={studentForm.rollNumber}
+                    onChange={(e) =>
+                      setStudentForm({
+                        ...studentForm,
+                        rollNumber: e.target.value,
+                      })
+                    }
+                    required
+                    className="px-4 py-2 border rounded-lg"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Mobile Number"
+                    value={studentForm.mobileNumber}
+                    onChange={(e) =>
+                      setStudentForm({
+                        ...studentForm,
+                        mobileNumber: e.target.value,
+                      })
+                    }
+                    required
+                    className="px-4 py-2 border rounded-lg"
+                  />
                   <div>
-                    <label className="block text-sm text-neutral-3/70 mb-1">Student Type</label>
-                    <select value={studentForm.studentType} onChange={(e) => setStudentForm({...studentForm, studentType: e.target.value})} className="w-full px-4 py-2 border rounded-lg">
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Student Type
+                    </label>
+                    <select
+                      value={studentForm.studentType}
+                      onChange={(e) =>
+                        setStudentForm({
+                          ...studentForm,
+                          studentType: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                    >
                       <option value="dayScholar">Day Scholar</option>
                       <option value="hosteler">Hosteler</option>
                     </select>
                   </div>
-                  {studentForm.studentType === 'dayScholar' && (
+                  {studentForm.studentType === "dayScholar" && (
                     <>
                       <div>
-                        <label className="block text-sm text-neutral-3/70 mb-1">Bus Route</label>
-                        <input type="text" placeholder="Bus Route" value={studentForm.busRoute} onChange={(e) => setStudentForm({...studentForm, busRoute: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
+                        <label className="block text-sm text-neutral-3/70 mb-1">
+                          Bus Route
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Bus Route"
+                          value={studentForm.busRoute}
+                          onChange={(e) =>
+                            setStudentForm({
+                              ...studentForm,
+                              busRoute: e.target.value,
+                            })
+                          }
+                          className="w-full px-4 py-2 border rounded-lg"
+                        />
                       </div>
                       <div className="flex items-center">
-                        <input type="checkbox" id="transportOpted" checked={studentForm.transportOpted} onChange={(e) => setStudentForm({...studentForm, transportOpted: e.target.checked})} className="mr-2" />
-                        <label htmlFor="transportOpted" className="text-sm text-neutral-3/70">Opt for Transport</label>
+                        <input
+                          type="checkbox"
+                          id="transportOpted"
+                          checked={studentForm.transportOpted}
+                          onChange={(e) =>
+                            setStudentForm({
+                              ...studentForm,
+                              transportOpted: e.target.checked,
+                            })
+                          }
+                          className="mr-2"
+                        />
+                        <label
+                          htmlFor="transportOpted"
+                          className="text-sm text-neutral-3/70"
+                        >
+                          Opt for Transport
+                        </label>
                       </div>
                     </>
                   )}
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-neutral-3/70 mb-1">Email (Optional)</label>
-                    <input type="email" placeholder="Email Address" value={studentForm.email} onChange={(e) => setStudentForm({...studentForm, email: e.target.value})} className="w-full px-4 py-2 border rounded-lg" />
+                    <label className="block text-sm text-neutral-3/70 mb-1">
+                      Email (Optional)
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="Email Address"
+                      value={studentForm.email}
+                      onChange={(e) =>
+                        setStudentForm({
+                          ...studentForm,
+                          email: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
                   </div>
                 </div>
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">{editingStudent ? 'Update Student' : 'Add Student'}</button>
-                  <button type="button" onClick={() => {
-                    setShowStudentForm(false);
-                    setEditingStudent(null);
-                    setStudentForm({
-                      studentName: '', fathersName: '', mothersName: '', address: '', class: '',
-                      rollNumber: '', enrollmentNumber: '', mobileNumber: '', studentType: 'dayScholar', busRoute: '', email: '', transportOpted: false
-                    });
-                    setEnrollmentDetails(null);
-      setEnrollmentLoading(false);
-                  }} className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg">Cancel</button>
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingStudent ? "Update Student" : "Add Student"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowStudentForm(false);
+                      setEditingStudent(null);
+                      setStudentForm({
+                        studentName: "",
+                        fathersName: "",
+                        mothersName: "",
+                        address: "",
+                        class: "",
+                        rollNumber: "",
+                        enrollmentNumber: "",
+                        mobileNumber: "",
+                        studentType: "dayScholar",
+                        busRoute: "",
+                        email: "",
+                        transportOpted: false,
+                      });
+                      setEnrollmentDetails(null);
+                      setEnrollmentLoading(false);
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </form>
             )}
             {/* Class Filter */}
             <div className="mb-4">
-              <label className="block text-sm text-neutral-3/70 mb-2">Filter by Class</label>
+              <label className="block text-sm text-neutral-3/70 mb-2">
+                Filter by Class
+              </label>
               <select
                 value={selectedClassForStudents}
                 onChange={(e) => setSelectedClassForStudents(e.target.value)}
@@ -2632,7 +5308,7 @@ const AdminDashboard = () => {
                 <option value="">All Classes</option>
                 {classes.map((cls) => (
                   <option key={cls._id} value={cls.className}>
-                    {cls.className} {cls.section ? `- ${cls.section}` : ''}
+                    {cls.className} {cls.section ? `- ${cls.section}` : ""}
                   </option>
                 ))}
               </select>
@@ -2650,37 +5326,61 @@ const AdminDashboard = () => {
                 </thead>
                 <tbody>
                   {students
-                    .filter((s) => !selectedClassForStudents || s.class === selectedClassForStudents)
+                    .filter(
+                      (s) =>
+                        !selectedClassForStudents ||
+                        s.class === selectedClassForStudents,
+                    )
                     .map((s) => (
-                    <tr key={s._id} className="border-b border-neutral-1">
-                      <td className="px-4 py-3 text-neutral-3">{s.studentName}</td>
-                      <td className="px-4 py-3 text-neutral-3">{s.class}</td>
-                      <td className="px-4 py-3 text-neutral-3">{s.rollNumber}</td>
-                      <td className="px-4 py-3 text-neutral-3">{s.mobileNumber}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex space-x-2">
-                          <button onClick={() => handleEditStudent(s)} className="text-secondary hover:text-secondary-600"><FiEdit /></button>
-                          <button onClick={() => handleDelete('student', s._id)} className="text-red-600 hover:text-red-700"><FiTrash2 /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                      <tr key={s._id} className="border-b border-neutral-1">
+                        <td className="px-4 py-3 text-neutral-3">
+                          {s.studentName}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-3">{s.class}</td>
+                        <td className="px-4 py-3 text-neutral-3">
+                          {s.rollNumber}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-3">
+                          {s.mobileNumber}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleEditStudent(s)}
+                              className="text-secondary hover:text-secondary-600"
+                            >
+                              <FiEdit />
+                            </button>
+                            <button
+                              onClick={() => handleDelete("student", s._id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <FiTrash2 />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
           </div>
         );
 
-      case 'examResults':
+      case "examResults":
         return (
           <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">Exam Results</h2>
-            
+            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
+              Exam Results
+            </h2>
+
             {/* Class Selection */}
             <div className="bg-neutral-2 rounded-lg shadow-md p-6 mb-6">
               <div className="flex flex-col md:flex-row gap-4 items-end">
                 <div className="flex-1">
-                  <label className="block text-neutral-3 font-semibold mb-2">Select Class</label>
+                  <label className="block text-neutral-3 font-semibold mb-2">
+                    Select Class
+                  </label>
                   <select
                     value={selectedClassForExam}
                     onChange={async (e) => {
@@ -2688,10 +5388,12 @@ const AdminDashboard = () => {
                       setSelectedClassForExam(className);
                       if (className) {
                         try {
-                          const res = await axios.get(`${API_BASE_URL}/api/examResults/class/${className}`);
+                          const res = await axios.get(
+                            `${API_BASE_URL}/api/examResults/class/${className}`,
+                          );
                           setExamResults(res.data);
                         } catch (error) {
-                          console.error('Error fetching exam results:', error);
+                          console.error("Error fetching exam results:", error);
                           setExamResults([]);
                         }
                       } else {
@@ -2703,7 +5405,7 @@ const AdminDashboard = () => {
                     <option value="">-- Select Class --</option>
                     {classes.map((cls) => (
                       <option key={cls._id} value={cls.className}>
-                        {cls.className} {cls.section ? `- ${cls.section}` : ''}
+                        {cls.className} {cls.section ? `- ${cls.section}` : ""}
                       </option>
                     ))}
                   </select>
@@ -2714,44 +5416,54 @@ const AdminDashboard = () => {
             {/* Results Display */}
             {examResults.length > 0 ? (
               <div className="space-y-6">
-                {Object.values(examResults.reduce((acc, result) => {
-                  const key = `${result.examType}_${result.examDate}`;
-                  if (!acc[key]) {
-                    acc[key] = {
-                      examType: result.examType,
-                      examDate: result.examDate,
-                      addedBy: result.addedBy?.name || 'Unknown',
-                      remarks: result.remarks,
-                      results: []
-                    };
-                  }
-                  acc[key].results.push(result);
-                  return acc;
-                }, {})).map((group, groupIndex) => {
+                {Object.values(
+                  examResults.reduce((acc, result) => {
+                    const key = `${result.examType}_${result.examDate}`;
+                    if (!acc[key]) {
+                      acc[key] = {
+                        examType: result.examType,
+                        examDate: result.examDate,
+                        addedBy: result.addedBy?.name || "Unknown",
+                        remarks: result.remarks,
+                        results: [],
+                      };
+                    }
+                    acc[key].results.push(result);
+                    return acc;
+                  }, {}),
+                ).map((group, groupIndex) => {
                   const getGrade = (percent) => {
-                    if (percent >= 90) return 'A+';
-                    if (percent >= 80) return 'A';
-                    if (percent >= 70) return 'B+';
-                    if (percent >= 60) return 'B';
-                    if (percent >= 50) return 'C+';
-                    if (percent >= 40) return 'C';
-                    return 'F';
+                    if (percent >= 90) return "A+";
+                    if (percent >= 80) return "A";
+                    if (percent >= 70) return "B+";
+                    if (percent >= 60) return "B";
+                    if (percent >= 50) return "C+";
+                    if (percent >= 40) return "C";
+                    return "F";
                   };
-                  
+
                   return (
-                    <div key={groupIndex} className="bg-neutral-2 rounded-lg shadow-md p-6">
+                    <div
+                      key={groupIndex}
+                      className="bg-neutral-2 rounded-lg shadow-md p-6"
+                    >
                       <div className="flex justify-between items-center mb-4 pb-4 border-b border-neutral-1">
                         <div>
-                          <h3 className="text-xl font-bold text-neutral-3 capitalize">{group.examType.replace('-', ' ')} Exam</h3>
+                          <h3 className="text-xl font-bold text-neutral-3 capitalize">
+                            {group.examType.replace("-", " ")} Exam
+                          </h3>
                           <p className="text-sm text-neutral-3/70">
-                            Date: {new Date(group.examDate).toLocaleDateString()}
+                            Date:{" "}
+                            {formatDateDDMMYYYY(group.examDate)}
                           </p>
                           <p className="text-xs text-neutral-3/50 mt-1">
                             Added by: {group.addedBy}
                           </p>
                         </div>
                         {group.remarks && (
-                          <p className="text-sm text-neutral-3/70 italic">{group.remarks}</p>
+                          <p className="text-sm text-neutral-3/70 italic">
+                            {group.remarks}
+                          </p>
                         )}
                       </div>
                       <div className="overflow-x-auto">
@@ -2760,29 +5472,54 @@ const AdminDashboard = () => {
                             <tr>
                               <th className="px-4 py-3 text-left">S.No</th>
                               <th className="px-4 py-3 text-left">Roll No</th>
-                              <th className="px-4 py-3 text-left">Student Name</th>
-                              <th className="px-4 py-3 text-left">Percentage</th>
+                              <th className="px-4 py-3 text-left">
+                                Student Name
+                              </th>
+                              <th className="px-4 py-3 text-left">
+                                Percentage
+                              </th>
                               <th className="px-4 py-3 text-left">Grade</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {group.results.sort((a, b) => a.rollNumber.localeCompare(b.rollNumber, undefined, { numeric: true })).map((result, index) => (
-                              <tr key={result._id} className="border-b border-neutral-1">
-                                <td className="px-4 py-3 text-neutral-3">{index + 1}</td>
-                                <td className="px-4 py-3 text-neutral-3">{result.rollNumber}</td>
-                                <td className="px-4 py-3 text-neutral-3">{result.studentName}</td>
-                                <td className="px-4 py-3 text-neutral-3 font-semibold">{result.examPercent}%</td>
-                                <td className="px-4 py-3">
-                                  <span className={`px-3 py-1 rounded text-sm font-semibold ${
-                                    result.examPercent >= 50 
-                                      ? 'bg-green-100 text-green-800' 
-                                      : 'bg-red-100 text-red-800'
-                                  }`}>
-                                    {getGrade(result.examPercent)}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
+                            {group.results
+                              .sort((a, b) =>
+                                a.rollNumber.localeCompare(
+                                  b.rollNumber,
+                                  undefined,
+                                  { numeric: true },
+                                ),
+                              )
+                              .map((result, index) => (
+                                <tr
+                                  key={result._id}
+                                  className="border-b border-neutral-1"
+                                >
+                                  <td className="px-4 py-3 text-neutral-3">
+                                    {index + 1}
+                                  </td>
+                                  <td className="px-4 py-3 text-neutral-3">
+                                    {result.rollNumber}
+                                  </td>
+                                  <td className="px-4 py-3 text-neutral-3">
+                                    {result.studentName}
+                                  </td>
+                                  <td className="px-4 py-3 text-neutral-3 font-semibold">
+                                    {result.examPercent}%
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span
+                                      className={`px-3 py-1 rounded text-sm font-semibold ${
+                                        result.examPercent >= 50
+                                          ? "bg-green-100 text-green-800"
+                                          : "bg-red-100 text-red-800"
+                                      }`}
+                                    >
+                                      {getGrade(result.examPercent)}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
                           </tbody>
                         </table>
                       </div>
@@ -2792,17 +5529,21 @@ const AdminDashboard = () => {
               </div>
             ) : selectedClassForExam ? (
               <div className="bg-neutral-2 rounded-lg shadow-md p-12 text-center">
-                <p className="text-neutral-3/70 text-lg">No results found for this class</p>
+                <p className="text-neutral-3/70 text-lg">
+                  No results found for this class
+                </p>
               </div>
             ) : (
               <div className="bg-neutral-2 rounded-lg shadow-md p-12 text-center">
-                <p className="text-neutral-3/70 text-lg">Please select a class to view exam results</p>
+                <p className="text-neutral-3/70 text-lg">
+                  Please select a class to view exam results
+                </p>
               </div>
             )}
           </div>
         );
 
-      case 'notices':
+      case "notices":
         return (
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -2812,7 +5553,7 @@ const AdminDashboard = () => {
                   setShowNoticeForm(!showNoticeForm);
                   if (!showNoticeForm) {
                     setEditingNotice(null);
-                    setNoticeForm({ title: '', message: '', tag: 'normal' });
+                    setNoticeForm({ title: "", message: "", tag: "normal" });
                   }
                 }}
                 className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
@@ -2822,29 +5563,42 @@ const AdminDashboard = () => {
               </button>
             </div>
             {showNoticeForm && (
-              <form onSubmit={handleSubmitNotice} className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4">
-                <h3 className="text-lg font-semibold text-neutral-3 mb-4">{editingNotice ? 'Edit Notice' : 'Add Notice'}</h3>
+              <form
+                onSubmit={handleSubmitNotice}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingNotice ? "Edit Notice" : "Add Notice"}
+                </h3>
                 <input
                   type="text"
                   placeholder="Notice Title"
                   value={noticeForm.title}
-                  onChange={(e) => setNoticeForm({...noticeForm, title: e.target.value})}
+                  onChange={(e) =>
+                    setNoticeForm({ ...noticeForm, title: e.target.value })
+                  }
                   required
                   className="w-full px-4 py-2 border rounded-lg"
                 />
                 <textarea
                   placeholder="Notice Message"
                   value={noticeForm.message}
-                  onChange={(e) => setNoticeForm({...noticeForm, message: e.target.value})}
+                  onChange={(e) =>
+                    setNoticeForm({ ...noticeForm, message: e.target.value })
+                  }
                   required
                   className="w-full px-4 py-2 border rounded-lg"
                   rows="4"
                 />
                 <div>
-                  <label className="block text-sm text-neutral-3/70 mb-2">Tag</label>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Tag
+                  </label>
                   <select
                     value={noticeForm.tag}
-                    onChange={(e) => setNoticeForm({...noticeForm, tag: e.target.value})}
+                    onChange={(e) =>
+                      setNoticeForm({ ...noticeForm, tag: e.target.value })
+                    }
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="normal">Normal</option>
@@ -2853,15 +5607,18 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 <div className="flex space-x-2">
-                  <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg">
-                    {editingNotice ? 'Update' : 'Add'} Notice
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingNotice ? "Update" : "Add"} Notice
                   </button>
                   <button
                     type="button"
                     onClick={() => {
                       setShowNoticeForm(false);
                       setEditingNotice(null);
-                      setNoticeForm({ title: '', message: '', tag: 'normal' });
+                      setNoticeForm({ title: "", message: "", tag: "normal" });
                     }}
                     className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
                   >
@@ -2872,32 +5629,40 @@ const AdminDashboard = () => {
             )}
             <div className="space-y-4">
               {notices.length === 0 ? (
-                <p className="text-neutral-3/70 text-center py-8">No notices added yet</p>
+                <p className="text-neutral-3/70 text-center py-8">
+                  No notices added yet
+                </p>
               ) : (
                 notices.map((notice) => (
                   <div
                     key={notice._id}
                     className={`bg-neutral-2 p-4 rounded-lg border-l-4 ${
-                      notice.tag === 'urgent'
-                        ? 'border-red-500'
-                        : notice.tag === 'new'
-                        ? 'border-green-500'
-                        : 'border-blue-500'
+                      notice.tag === "urgent"
+                        ? "border-red-500"
+                        : notice.tag === "new"
+                          ? "border-green-500"
+                          : "border-blue-500"
                     }`}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold text-neutral-3 text-lg">{notice.title}</h3>
+                      <h3 className="font-semibold text-neutral-3 text-lg">
+                        {notice.title}
+                      </h3>
                       <div className="flex items-center space-x-2">
                         <span
                           className={`px-2 py-1 rounded text-xs font-semibold ${
-                            notice.tag === 'urgent'
-                              ? 'bg-red-100 text-red-800'
-                              : notice.tag === 'new'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-blue-100 text-blue-800'
+                            notice.tag === "urgent"
+                              ? "bg-red-100 text-red-800"
+                              : notice.tag === "new"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-blue-100 text-blue-800"
                           }`}
                         >
-                          {notice.tag === 'urgent' ? 'Urgent' : notice.tag === 'new' ? 'New' : 'Normal'}
+                          {notice.tag === "urgent"
+                            ? "Urgent"
+                            : notice.tag === "new"
+                              ? "New"
+                              : "Normal"}
                         </span>
                         <button
                           onClick={() => handleEditNotice(notice)}
@@ -2906,16 +5671,18 @@ const AdminDashboard = () => {
                           <FiEdit />
                         </button>
                         <button
-                          onClick={() => handleDelete('notice', notice._id)}
+                          onClick={() => handleDelete("notice", notice._id)}
                           className="text-red-600 hover:text-red-700"
                         >
                           <FiTrash2 />
                         </button>
                       </div>
                     </div>
-                    <p className="text-sm text-neutral-3/70 mb-2">{notice.message}</p>
+                    <p className="text-sm text-neutral-3/70 mb-2">
+                      {notice.message}
+                    </p>
                     <p className="text-xs text-neutral-3/50">
-                      {new Date(notice.createdAt).toLocaleDateString()}
+                      {formatDateDDMMYYYY(notice.createdAt)}
                     </p>
                   </div>
                 ))
@@ -2930,34 +5697,52 @@ const AdminDashboard = () => {
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: FiSettings },
-    { id: 'users', label: 'Manage Users', icon: FiUsers },
-    { id: 'addTeacher', label: 'Add Teacher', icon: FiUserPlus },
-    { id: 'notifications', label: 'Notifications', icon: FiBell },
-    { id: 'events', label: 'Events', icon: FiCalendar },
-    { id: 'carousel', label: 'Carousel', icon: FiImage },
-    { id: 'contacts', label: 'Contact Queries', icon: FiMail },
-    { id: 'gallery', label: 'Gallery', icon: FiImage },
-    { id: 'classes', label: 'Classes', icon: FiFileText },
-    { id: 'classTeachers', label: 'Class Teachers', icon: FiUsers },
-    { id: 'enrollmentNumbers', label: 'Enrollment Numbers', icon: FiFileText },
-    { id: 'students', label: 'Students', icon: FiUserPlus },
-    { id: 'fees', label: 'Fees', icon: FiDollarSign },
-    { id: 'fines', label: 'Fines', icon: FiDollarSign },
-    { id: 'examResults', label: 'Exam Results', icon: FiAward },
-    { id: 'notices', label: 'Notices', icon: FiBell }
+    { id: "dashboard", label: "Dashboard", icon: FiSettings },
+    { id: "users", label: "Manage Users", icon: FiUsers },
+    { id: "addTeacher", label: "Add Teacher", icon: FiUserPlus },
+    { id: "notifications", label: "Notifications", icon: FiBell },
+    { id: "events", label: "Events", icon: FiCalendar },
+    { id: "carousel", label: "Carousel", icon: FiImage },
+    { id: "contacts", label: "Contact Queries", icon: FiMail },
+    { id: "gallery", label: "Gallery", icon: FiImage },
+    { id: "classes", label: "Classes", icon: FiFileText },
+    { id: "classTeachers", label: "Class Teachers", icon: FiUsers },
+    { id: "enrollmentNumbers", label: "Enrollment Numbers", icon: FiFileText },
+    { id: "students", label: "Students", icon: FiUserPlus },
+    { id: "fees", label: "Fees", icon: FiDollarSign },
+    { id: "fines", label: "Fines", icon: FiDollarSign },
+    { id: "examResults", label: "Exam Results", icon: FiAward },
+    { id: "notices", label: "Notices", icon: FiBell },
+    { id: "attendance", label: "Attendance", icon: FiCalendar },
   ];
 
+  const activeMenuLabel =
+    menuItems.find((item) => item.id === activeTab)?.label || "Dashboard";
+
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-1">
+    <div className="ui-dashboard-shell">
       <Header />
-      <div className="flex-grow flex">
+      <div className="flex flex-grow">
+        {sidebarOpen && (
+          <button
+            type="button"
+            className="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[1px] lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close sidebar"
+          />
+        )}
+
         {/* Sidebar */}
-        <aside className={`${sidebarOpen ? 'w-64' : 'w-0'} bg-primary text-white transition-all duration-300 overflow-hidden ${sidebarOpen ? 'block' : 'hidden md:block'}`}>
-          <div className="p-4">
+        <aside
+          className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-40 w-72 overflow-y-auto border-r border-white/10 bg-primary text-white shadow-2xl transition-transform duration-300 lg:static lg:translate-x-0`}
+        >
+          <div className="p-4 lg:pt-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold">Admin Panel</h2>
-              <button onClick={() => setSidebarOpen(!sidebarOpen)} className="md:hidden text-white">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden text-white"
+              >
                 <FiX />
               </button>
             </div>
@@ -2967,9 +5752,19 @@ const AdminDashboard = () => {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      if (
+                        typeof window !== "undefined" &&
+                        window.innerWidth < 1024
+                      ) {
+                        setSidebarOpen(false);
+                      }
+                    }}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${
-                      activeTab === item.id ? 'bg-secondary text-white' : 'hover:bg-primary-700'
+                      activeTab === item.id
+                        ? "bg-secondary text-white"
+                        : "hover:bg-primary-700"
                     }`}
                   >
                     <Icon />
@@ -2982,13 +5777,32 @@ const AdminDashboard = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6">
-          {!sidebarOpen && (
-            <button onClick={() => setSidebarOpen(true)} className="mb-4 md:hidden bg-primary text-white p-2 rounded">
-              <FiMenu />
-            </button>
-          )}
-          {renderContent()}
+        <main className="flex-1 p-4 sm:p-6 lg:ml-0">
+          <div className="mb-5 rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+                  Admin Dashboard
+                </h1>
+                <p className="mt-1 text-sm text-slate-600">
+                  Active section: {activeMenuLabel}
+                </p>
+              </div>
+              {!sidebarOpen && (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm lg:hidden"
+                >
+                  <FiMenu />
+                  <span>Menu</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm sm:p-5">
+            {renderContent()}
+          </div>
         </main>
       </div>
       <Footer />

@@ -5,6 +5,7 @@ import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import axios from 'axios';
 import { API_BASE_URL } from '../../utils/api';
+import { formatDateDDMMYYYY } from '../../utils/date';
 import {
   FiDollarSign,
   FiUsers,
@@ -389,7 +390,7 @@ const AccountantDashboard = () => {
                   events.map((event) => (
                     <div key={event._id} className="border-l-4 border-secondary pl-4 py-2">
                       <h3 className="font-semibold text-neutral-3">{event.title}</h3>
-                      <p className="text-sm text-neutral-3/70">{new Date(event.date).toLocaleDateString()}</p>
+                      <p className="text-sm text-neutral-3/70">{formatDateDDMMYYYY(event.date)}</p>
                       {event.location && (
                         <p className="text-sm text-neutral-3/50">{event.location}</p>
                       )}
@@ -416,7 +417,7 @@ const AccountantDashboard = () => {
                       <h3 className="font-semibold text-sm text-neutral-3">{notification.title}</h3>
                       <p className="text-xs text-neutral-3/70 mt-1">{notification.message}</p>
                       <p className="text-xs text-neutral-3/50 mt-1">
-                        {new Date(notification.createdAt).toLocaleDateString()}
+                        {formatDateDDMMYYYY(notification.createdAt)}
                       </p>
                     </div>
                   ))
@@ -494,7 +495,7 @@ const AccountantDashboard = () => {
                       events.map((event) => (
                         <div key={event._id} className="border-l-4 border-secondary pl-4 py-2">
                           <h3 className="font-semibold text-neutral-3">{event.title}</h3>
-                          <p className="text-sm text-neutral-3/70">{new Date(event.date).toLocaleDateString()}</p>
+                          <p className="text-sm text-neutral-3/70">{formatDateDDMMYYYY(event.date)}</p>
                           {event.location && (
                             <p className="text-sm text-neutral-3/50">{event.location}</p>
                           )}
@@ -521,7 +522,7 @@ const AccountantDashboard = () => {
                           <h3 className="font-semibold text-sm text-neutral-3">{notification.title}</h3>
                           <p className="text-xs text-neutral-3/70 mt-1">{notification.message}</p>
                           <p className="text-xs text-neutral-3/50 mt-1">
-                            {new Date(notification.createdAt).toLocaleDateString()}
+                            {formatDateDDMMYYYY(notification.createdAt)}
                           </p>
                         </div>
                       ))
@@ -548,7 +549,7 @@ const AccountantDashboard = () => {
                         <tr key={fee._id} className="border-b border-neutral-1">
                           <td className="py-3 px-4 text-sm text-neutral-3">{fee.studentId?.studentName || 'N/A'}</td>
                           <td className="py-3 px-4 text-sm text-neutral-3">₹{fee.amount}</td>
-                          <td className="py-3 px-4 text-sm text-neutral-3">{new Date(fee.dueDate).toLocaleDateString()}</td>
+                          <td className="py-3 px-4 text-sm text-neutral-3">{formatDateDDMMYYYY(fee.dueDate)}</td>
                           <td className="py-3 px-4 text-sm">
                             <span className={`px-2 py-1 rounded text-xs ${
                               fee.status === 'paid' ? 'bg-green-100 text-green-800' :
@@ -862,7 +863,7 @@ const AccountantDashboard = () => {
                             <td className="px-4 py-3 text-neutral-3 capitalize">{f.feesType || 'monthly'}</td>
                             <td className="px-4 py-3 text-neutral-3 capitalize">{f.feeCategory || 'regular'}</td>
                             <td className="px-4 py-3 text-neutral-3 font-semibold">₹{f.amount.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-neutral-3">{new Date(f.dueDate).toLocaleDateString()}</td>
+                            <td className="px-4 py-3 text-neutral-3">{formatDateDDMMYYYY(f.dueDate)}</td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-1 rounded text-xs ${
                                 f.status === 'paid' ? 'bg-green-100 text-green-800' :
@@ -1209,7 +1210,7 @@ const AccountantDashboard = () => {
                                 <td className="px-4 py-3 text-neutral-3 max-w-xs truncate" title={f.reason}>{f.reason}</td>
                                 <td className="px-4 py-3 text-neutral-3">
                                   <div className="flex flex-col">
-                                    <span>{new Date(f.dueDate).toLocaleDateString()}</span>
+                                    <span>{formatDateDDMMYYYY(f.dueDate)}</span>
                                     {new Date(f.dueDate) < new Date() && f.status !== 'paid' && (
                                       <span className="text-xs text-red-600 font-semibold">Overdue</span>
                                     )}
@@ -1358,7 +1359,7 @@ const AccountantDashboard = () => {
                       </div>
                       <p className="text-sm text-neutral-3/70 mb-2">{notice.message}</p>
                       <p className="text-xs text-neutral-3/50">
-                        {new Date(notice.createdAt).toLocaleDateString()}
+                        {formatDateDDMMYYYY(notice.createdAt)}
                       </p>
                     </div>
                   ))

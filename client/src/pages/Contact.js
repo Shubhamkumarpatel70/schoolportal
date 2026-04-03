@@ -3,7 +3,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/api';
-import { FiMail, FiPhone, FiMapPin, FiSend } from 'react-icons/fi';
+import { FiMail, FiMapPin, FiPhone, FiSend } from 'react-icons/fi';
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -39,131 +39,123 @@ const Contact = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="ui-shell">
       <Header />
-      
+
       <div className="flex-grow">
-        {/* Hero Section */}
-        <section className="bg-gradient-to-r from-primary to-primary-600 text-white py-16">
-          <div className="container mx-auto px-4 text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Contact Us</h1>
-            <p className="text-xl text-white/90">
-              We'd love to hear from you
+        <section className="ui-hero">
+          <div className="ui-container relative text-center">
+            <h1 className="text-4xl font-bold sm:text-5xl">Contact Us</h1>
+            <p className="mx-auto mt-4 max-w-2xl text-sm text-white/90 sm:text-lg">
+              Reach out for admissions, academic support, or general school inquiries.
             </p>
           </div>
         </section>
 
-        {/* Contact Section */}
-        <section className="py-16 bg-neutral-1">
-          <div className="container mx-auto px-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-              {/* Contact Info */}
-              <div>
-                <h2 className="text-3xl font-bold mb-8 text-neutral-3">Get in Touch</h2>
-                <div className="space-y-6">
-                  <div className="flex items-start space-x-4">
-                    <div className="bg-secondary/10 p-3 rounded-lg">
-                      <FiMapPin className="text-secondary text-xl" />
+        <section className="ui-section">
+          <div className="ui-container">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="ui-card p-6 sm:p-8">
+                <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Get in Touch</h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  Our team is available during working hours for student and parent assistance.
+                </p>
+                <div className="mt-8 space-y-5">
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-xl bg-secondary/10 p-3">
+                      <FiMapPin className="text-lg text-secondary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg mb-1 text-neutral-3">Address</h3>
-                      <p className="text-neutral-3/70">
+                      <h3 className="text-base font-semibold text-slate-900">Address</h3>
+                      <p className="mt-1 text-sm text-slate-600">
                         123 School Street<br />
                         City, State 12345<br />
                         United States
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-start space-x-4">
-                    <div className="bg-secondary/10 p-3 rounded-lg">
-                      <FiPhone className="text-secondary text-xl" />
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-xl bg-secondary/10 p-3">
+                      <FiPhone className="text-lg text-secondary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg mb-1 text-neutral-3">Phone</h3>
-                      <p className="text-neutral-3/70">+1 (555) 123-4567</p>
+                      <h3 className="text-base font-semibold text-slate-900">Phone</h3>
+                      <p className="mt-1 text-sm text-slate-600">+1 (555) 123-4567</p>
                     </div>
                   </div>
-                  <div className="flex items-start space-x-4">
-                    <div className="bg-secondary/10 p-3 rounded-lg">
-                      <FiMail className="text-secondary text-xl" />
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-xl bg-secondary/10 p-3">
+                      <FiMail className="text-lg text-secondary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg mb-1 text-neutral-3">Email</h3>
-                      <p className="text-neutral-3/70">info@schoolportal.com</p>
+                      <h3 className="text-base font-semibold text-slate-900">Email</h3>
+                      <p className="mt-1 text-sm text-slate-600">info@schoolportal.com</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Contact Form */}
-              <div>
-                <h2 className="text-3xl font-bold mb-8 text-neutral-3">Send us a Message</h2>
+              <div className="ui-card p-6 sm:p-8">
+                <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Send a Message</h2>
+                <p className="mt-2 text-sm text-slate-600">Use this form and our team will respond shortly.</p>
                 {message && (
-                  <div className={`mb-4 p-4 rounded-lg ${
+                  <div className={`mb-5 mt-5 ${
                     message.includes('Error') 
-                      ? 'bg-red-50 text-red-700 border border-red-200' 
-                      : 'bg-green-50 text-green-700 border border-green-200'
+                      ? 'ui-status-error' 
+                      : 'ui-status-success'
                   }`}>
                     {message}
                   </div>
                 )}
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="mt-6 space-y-5">
                   <div>
-                    <label className="block text-neutral-3 font-semibold mb-2">
-                      Name
-                    </label>
+                    <label className="ui-label">Name</label>
                     <input
                       type="text"
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent bg-neutral-2"
+                      className="ui-input"
                     />
                   </div>
                   <div>
-                    <label className="block text-neutral-3 font-semibold mb-2">
-                      Email
-                    </label>
+                    <label className="ui-label">Email</label>
                     <input
                       type="email"
                       name="email"
                       value={formData.email}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent bg-neutral-2"
+                      className="ui-input"
                     />
                   </div>
                   <div>
-                    <label className="block text-neutral-3 font-semibold mb-2">
-                      Subject
-                    </label>
+                    <label className="ui-label">Subject</label>
                     <input
                       type="text"
                       name="subject"
                       value={formData.subject}
                       onChange={handleChange}
                       required
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent bg-neutral-2"
+                      className="ui-input"
                     />
                   </div>
                   <div>
-                    <label className="block text-neutral-3 font-semibold mb-2">
-                      Message
-                    </label>
+                    <label className="ui-label">Message</label>
                     <textarea
                       name="message"
                       value={formData.message}
                       onChange={handleChange}
                       required
                       rows="5"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent bg-neutral-2"
+                      className="ui-textarea"
                     />
                   </div>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="bg-primary text-white px-8 py-3 rounded-lg font-semibold hover:bg-primary-700 transition flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="ui-btn-primary"
                   >
                     <FiSend />
                     <span>{loading ? 'Sending...' : 'Send Message'}</span>

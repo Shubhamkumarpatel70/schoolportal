@@ -5,7 +5,20 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/api';
-import { FiBook, FiUsers, FiAward, FiTrendingUp, FiChevronLeft, FiChevronRight, FiCalendar, FiBell, FiAlertCircle, FiLayout } from 'react-icons/fi';
+import { formatDateDDMMYYYY } from '../utils/date';
+import {
+  FiAlertCircle,
+  FiArrowRight,
+  FiAward,
+  FiBell,
+  FiBookOpen,
+  FiCalendar,
+  FiChevronLeft,
+  FiChevronRight,
+  FiLayout,
+  FiTrendingUp,
+  FiUsers
+} from 'react-icons/fi';
 
 const Home = () => {
   const { user } = useAuth();
@@ -79,13 +92,19 @@ const Home = () => {
     setCurrentSlide((prev) => (prev - 1 + carouselImages.length) % carouselImages.length);
   };
 
+  const spotlightStats = [
+    { label: 'Upcoming Events', value: events.length.toString(), icon: FiCalendar },
+    { label: 'Active Notices', value: notices.length.toString(), icon: FiAlertCircle },
+    { label: 'Notifications', value: notifications.length.toString(), icon: FiBell },
+    { label: 'Portal Access', value: user ? 'Member' : 'Open', icon: FiUsers }
+  ];  
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="ui-shell">
       <Header />
-      
-      {/* Carousel Section */}
+
       {carouselImages.length > 0 && (
-        <section className="relative h-96 md:h-[500px] overflow-hidden">
+        <section className="relative h-[420px] overflow-hidden sm:h-[520px]">
           {carouselImages.map((item, index) => (
             <div
               key={item._id}
@@ -94,15 +113,30 @@ const Home = () => {
               }`}
             >
               <div
-                className="w-full h-full bg-cover bg-center"
+                className="h-full w-full bg-cover bg-center"
                 style={{
                   backgroundImage: item.image ? `url(${item.image})` : 'linear-gradient(to right, #0B3C5D, #328CC1)',
                 }}
               >
-                <div className="absolute inset-0 bg-primary/60 flex items-center justify-center">
-                  <div className="text-center text-white px-4">
-                    {item.title && <h2 className="text-3xl md:text-5xl font-bold mb-4">{item.title}</h2>}
-                    {item.description && <p className="text-xl md:text-2xl">{item.description}</p>}
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/70 via-primary/70 to-primary/40">
+                  <div className="ui-container flex h-full items-center">
+                    <div className="max-w-2xl text-white">
+                      <p className="mb-4 inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider">
+                        Welcome to School Portal
+                      </p>
+                      {item.title && <h1 className="text-3xl font-bold sm:text-4xl lg:text-5xl">{item.title}</h1>}
+                      {item.description && (
+                        <p className="mt-4 text-sm text-white/90 sm:text-base lg:text-lg">{item.description}</p>
+                      )}
+                      <div className="mt-8 flex flex-wrap gap-3">
+                        <Link to="/register" className="ui-btn-primary bg-accent text-primary hover:bg-accent-600">
+                          Start Enrollment
+                        </Link>
+                        <Link to="/about" className="ui-btn-secondary border-white/70 bg-white/15 text-white hover:bg-white/20">
+                          Discover Campus
+                        </Link>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -112,24 +146,27 @@ const Home = () => {
             <>
               <button
                 onClick={prevSlide}
-                className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-2 rounded-full transition"
+                className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/20 p-2 text-white transition hover:bg-black/40"
+                aria-label="Previous slide"
               >
                 <FiChevronLeft size={24} />
               </button>
               <button
                 onClick={nextSlide}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white p-2 rounded-full transition"
+                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/20 p-2 text-white transition hover:bg-black/40"
+                aria-label="Next slide"
               >
                 <FiChevronRight size={24} />
               </button>
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+              <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 space-x-2">
                 {carouselImages.map((_, index) => (
                   <button
                     key={index}
                     onClick={() => setCurrentSlide(index)}
-                    className={`w-2 h-2 rounded-full transition ${
+                    className={`h-2.5 w-8 rounded-full transition ${
                       index === currentSlide ? 'bg-white' : 'bg-white/50'
                     }`}
+                    aria-label={`Go to slide ${index + 1}`}
                   />
                 ))}
               </div>
@@ -138,171 +175,162 @@ const Home = () => {
         </section>
       )}
 
-      {/* Hero Section */}
       {carouselImages.length === 0 && (
-        <section className="bg-gradient-to-r from-primary to-primary-600 text-white py-20">
-        <div className="container mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold mb-6">
-            Welcome to School Portal
-          </h1>
-          <p className="text-xl md:text-2xl mb-8 text-white/90">
-            Empowering Education Through Technology
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/register"
-              className="bg-accent text-primary px-8 py-3 rounded-lg font-semibold hover:bg-accent-600 transition shadow-lg"
-            >
-              Get Started
-            </Link>
-            <Link
-              to="/about"
-              className="bg-transparent border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-primary transition"
-            >
-              Learn More
-            </Link>
+        <section className="ui-hero">
+          <div className="ui-container relative text-center">
+            <h1 className="text-4xl font-bold sm:text-5xl lg:text-6xl">Education, Operations, and Outcomes in One Place</h1>
+            <p className="mx-auto mt-5 max-w-3xl text-base text-white/90 sm:text-xl">
+              A connected digital campus for students, teachers, and administration teams.
+            </p>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <Link to="/register" className="ui-btn-primary bg-accent text-primary hover:bg-accent-600">
+                Get Started
+              </Link>
+              <Link to="/about" className="ui-btn-secondary border-white/70 bg-white/15 text-white hover:bg-white/20">
+                Learn More
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
       )}
 
-      {/* Features Section */}
-      <section className="py-16 bg-neutral-1">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12 text-neutral-3">Why Choose Us</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="bg-neutral-2 p-6 rounded-lg shadow-md text-center">
-              <FiBook className="text-4xl text-secondary mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2 text-neutral-3">Quality Education</h3>
-              <p className="text-neutral-3/70">
-                Comprehensive curriculum designed for excellence
-              </p>
+      <section className="ui-section py-8 sm:py-10">
+        <div className="ui-container">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {spotlightStats.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <article
+                  key={item.label}
+                  className="ui-stat-card ui-fade-up"
+                  style={{ animationDelay: `${index * 70}ms` }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="ui-badge">{item.label}</span>
+                    <Icon className="text-lg text-secondary" />
+                  </div>
+                  <p className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">{item.value}</p>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="ui-section">
+        <div className="ui-container">
+          <div className="text-center">
+            <h2 className="ui-title">Why Families Trust Us</h2>
+            <p className="ui-subtitle mx-auto max-w-2xl">
+              Clear communication, strong academics, and measurable student progress.
+            </p>
+          </div>
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="ui-card ui-fade-up p-6">
+              <FiBookOpen className="text-3xl text-secondary" />
+              <h3 className="mt-5 text-lg font-semibold text-slate-900">Academic Excellence</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Structured curriculum and outcomes-focused teaching standards.</p>
             </div>
-            <div className="bg-neutral-2 p-6 rounded-lg shadow-md text-center">
-              <FiUsers className="text-4xl text-secondary mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2 text-neutral-3">Expert Faculty</h3>
-              <p className="text-neutral-3/70">
-                Experienced teachers dedicated to student success
-              </p>
+            <div className="ui-card ui-fade-up p-6" style={{ animationDelay: '70ms' }}>
+              <FiUsers className="text-3xl text-secondary" />
+              <h3 className="mt-5 text-lg font-semibold text-slate-900">Experienced Faculty</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Subject specialists committed to mentoring and performance.</p>
             </div>
-            <div className="bg-neutral-2 p-6 rounded-lg shadow-md text-center">
-              <FiAward className="text-4xl text-accent mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2 text-neutral-3">Award Winning</h3>
-              <p className="text-neutral-3/70">
-                Recognized for academic excellence and innovation
-              </p>
+            <div className="ui-card ui-fade-up p-6" style={{ animationDelay: '140ms' }}>
+              <FiAward className="text-3xl text-accent" />
+              <h3 className="mt-5 text-lg font-semibold text-slate-900">Recognized Standards</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Consistent benchmarks across academics, activities, and discipline.</p>
             </div>
-            <div className="bg-neutral-2 p-6 rounded-lg shadow-md text-center">
-              <FiTrendingUp className="text-4xl text-secondary mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2 text-neutral-3">Modern Facilities</h3>
-              <p className="text-neutral-3/70">
-                State-of-the-art infrastructure and technology
-              </p>
+            <div className="ui-card ui-fade-up p-6" style={{ animationDelay: '210ms' }}>
+              <FiTrendingUp className="text-3xl text-secondary" />
+              <h3 className="mt-5 text-lg font-semibold text-slate-900">Growth Dashboard</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Transparent student and institutional progress tracking.</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Notices Section - Upcoming Notice News */}
       {notices.length > 0 && (
-        <section className="py-16 bg-gradient-to-b from-neutral-1 to-neutral-2">
-          <div className="container mx-auto px-4">
-            <div className="max-w-6xl mx-auto">
-              <h2 className="text-3xl md:text-4xl font-bold text-center mb-8 text-neutral-3 flex items-center justify-center space-x-3">
-                <FiAlertCircle className="text-secondary text-4xl" />
-                <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  Upcoming Notice News
-                </span>
-              </h2>
-              
-              <div className="bg-neutral-2 rounded-xl shadow-2xl p-6 md:p-8 border-2 border-primary/20">
-                <div className="space-y-4">
-                  {notices.map((notice, index) => (
-                    <div
-                      key={notice._id}
-                      className={`bg-white rounded-lg shadow-md border-l-4 p-5 md:p-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 ${
-                        notice.tag === 'urgent'
-                          ? 'border-red-500 bg-red-50/50'
-                          : notice.tag === 'new'
-                          ? 'border-green-500 bg-green-50/50'
-                          : 'border-blue-500 bg-blue-50/50'
-                      }`}
-                    >
-                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-bold text-neutral-3 text-lg md:text-xl">
-                              {notice.title}
-                            </h3>
-                            {notice.tag === 'urgent' && (
-                              <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded animate-pulse">
-                                URGENT
-                              </span>
-                            )}
-                            {notice.tag === 'new' && (
-                              <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">
-                                NEW
-                              </span>
-                            )}
-                          </div>
-                          <div className="bg-neutral-1/50 rounded-md p-4 mt-3">
-                            <p className="text-neutral-3/90 text-sm md:text-base leading-relaxed whitespace-pre-line">
-                              {notice.message}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between pt-3 border-t-2 border-neutral-1/30">
-                        <div className="flex items-center gap-2 text-sm text-neutral-3/70">
-                          <FiCalendar className="text-secondary" />
-                          <span className="font-medium">
-                            {new Date(notice.createdAt).toLocaleDateString('en-US', { 
-                              year: 'numeric', 
-                              month: 'long', 
-                              day: 'numeric',
-                              weekday: 'short'
-                            })}
-                          </span>
-                        </div>
-                        <div className="text-xs text-neutral-3/50">
-                          {notice.createdBy?.name && `Posted by: ${notice.createdBy.name}`}
-                        </div>
-                      </div>
+        <section className="ui-section pt-4">
+          <div className="ui-container">
+            <div className="ui-card overflow-hidden">
+              <div className="border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-8">
+                <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900 sm:text-2xl">
+                  <FiAlertCircle className="text-secondary" />
+                  Campus Notices
+                </h2>
+              </div>
+              <div className="space-y-4 px-5 py-6 sm:px-8">
+                {notices.map((notice) => (
+                  <article
+                    key={notice._id}
+                    className={`rounded-xl border p-5 ${
+                      notice.tag === 'urgent'
+                        ? 'border-red-200 bg-red-50'
+                        : notice.tag === 'new'
+                        ? 'border-emerald-200 bg-emerald-50'
+                        : 'border-blue-200 bg-blue-50'
+                    }`}
+                  >
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-lg font-semibold text-slate-900">{notice.title}</h3>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                          notice.tag === 'urgent'
+                            ? 'bg-red-100 text-red-700'
+                            : notice.tag === 'new'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}
+                      >
+                        {notice.tag || 'normal'}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <p className="text-sm leading-6 text-slate-700 whitespace-pre-line">{notice.message}</p>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 text-xs text-slate-500">
+                      <span className="inline-flex items-center gap-1">
+                        <FiCalendar />
+                        {formatDateDDMMYYYY(notice.createdAt)}
+                      </span>
+                      <span>{notice.createdBy?.name ? `Posted by ${notice.createdBy.name}` : 'School Administration'}</span>
+                    </div>
+                  </article>
+                ))}
               </div>
             </div>
           </div>
         </section>
       )}
 
-      {/* Events and Notifications Section */}
-      <section className="py-16 bg-neutral-2">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Upcoming Events */}
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-neutral-3 flex items-center space-x-2">
+      <section className="ui-section">
+        <div className="ui-container">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="ui-card p-6 sm:p-8">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
                   <FiCalendar className="text-secondary" />
-                  <span>Upcoming Events</span>
+                  Upcoming Events
                 </h2>
-                <Link to="/events" className="text-secondary hover:underline text-sm">
-                  View All
+                <Link to="/events" className="text-sm font-semibold text-secondary hover:underline">
+                  View all
                 </Link>
               </div>
               <div className="space-y-4">
                 {events.length === 0 ? (
-                  <p className="text-neutral-3/70 text-center py-8">No upcoming events</p>
+                  <p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                    No upcoming events.
+                  </p>
                 ) : (
                   events.map((event) => (
-                    <div key={event._id} className="bg-neutral-1 p-4 rounded-lg border-l-4 border-secondary">
-                      <h3 className="font-semibold text-neutral-3 mb-1">{event.title}</h3>
-                      <p className="text-sm text-neutral-3/70 mb-2">{event.description}</p>
-                      <p className="text-xs text-neutral-3/50">
-                        {new Date(event.date).toLocaleDateString()}
-                        {event.location && ` • ${event.location}`}
+                    <div
+                      key={event._id}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-secondary/40"
+                    >
+                      <h3 className="text-base font-semibold text-slate-900">{event.title}</h3>
+                      <p className="mt-2 text-sm text-slate-600">{event.description}</p>
+                      <p className="mt-3 text-xs font-medium text-slate-500">
+                        {formatDateDDMMYYYY(event.date)}
+                        {event.location ? ` • ${event.location}` : ''}
                       </p>
                     </div>
                   ))
@@ -310,27 +338,31 @@ const Home = () => {
               </div>
             </div>
 
-            {/* Recent Notifications */}
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-neutral-3 flex items-center space-x-2">
+            <div className="ui-card p-6 sm:p-8">
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
                   <FiBell className="text-secondary" />
-                  <span>Recent Notifications</span>
+                  Notifications
                 </h2>
-                <Link to="/notifications" className="text-secondary hover:underline text-sm">
-                  View All
+                <Link to="/notifications" className="text-sm font-semibold text-secondary hover:underline">
+                  View all
                 </Link>
               </div>
               <div className="space-y-4">
                 {notifications.length === 0 ? (
-                  <p className="text-neutral-3/70 text-center py-8">No notifications</p>
+                  <p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                    No notifications available.
+                  </p>
                 ) : (
                   notifications.map((notification) => (
-                    <div key={notification._id} className="bg-neutral-1 p-4 rounded-lg border-l-4 border-secondary">
-                      <h3 className="font-semibold text-neutral-3 mb-1">{notification.title}</h3>
-                      <p className="text-sm text-neutral-3/70 mb-2">{notification.message}</p>
-                      <p className="text-xs text-neutral-3/50">
-                        {new Date(notification.createdAt).toLocaleDateString()}
+                    <div
+                      key={notification._id}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-secondary/40"
+                    >
+                      <h3 className="text-base font-semibold text-slate-900">{notification.title}</h3>
+                      <p className="mt-2 text-sm text-slate-600">{notification.message}</p>
+                      <p className="mt-3 text-xs font-medium text-slate-500">
+                        {formatDateDDMMYYYY(notification.createdAt)}
                       </p>
                     </div>
                   ))
@@ -341,35 +373,38 @@ const Home = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-16 bg-primary text-white">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
-          <p className="text-xl mb-8 text-white/90">
-            {user 
-              ? `Welcome back, ${user.name}! Access your dashboard to continue.`
-              : 'Join our community and experience the future of education'
-            }
-          </p>
-          {user ? (
-            <button
-              onClick={() => {
-                const role = user.role || 'student';
-                navigate(`/${role}/dashboard`);
-              }}
-              className="bg-accent text-primary px-8 py-3 rounded-lg font-semibold hover:bg-accent-600 transition shadow-lg inline-flex items-center space-x-2"
-            >
-              <FiLayout />
-              <span>Go to Dashboard</span>
-            </button>
-          ) : (
-            <Link
-              to="/register"
-              className="bg-accent text-primary px-8 py-3 rounded-lg font-semibold hover:bg-accent-600 transition shadow-lg inline-block"
-            >
-              Register Now
-            </Link>
-          )}
+      <section className="ui-section pt-4">
+        <div className="ui-container">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary-600 to-secondary px-6 py-10 text-white shadow-xl shadow-primary/30 sm:px-10">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.2),transparent_35%)]" />
+            <div className="relative max-w-3xl">
+              <h2 className="text-3xl font-bold sm:text-4xl">Ready to Move Forward?</h2>
+              <p className="mt-4 text-base text-white/90 sm:text-lg">
+                {user
+                  ? `Welcome back, ${user.name}! Access your dashboard to continue.`
+                  : 'Join our school community and start your academic journey today.'}
+              </p>
+              <div className="mt-8">
+                {user ? (
+                  <button
+                    onClick={() => {
+                      const role = user.role || 'student';
+                      navigate(`/${role}/dashboard`);
+                    }}
+                    className="ui-btn-primary bg-accent text-primary hover:bg-accent-600"
+                  >
+                    <FiLayout />
+                    <span>Go to Dashboard</span>
+                  </button>
+                ) : (
+                  <Link to="/register" className="ui-btn-primary bg-accent text-primary hover:bg-accent-600">
+                    Register Now
+                    <FiArrowRight />
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

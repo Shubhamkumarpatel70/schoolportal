@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FiMenu, FiX, FiUser, FiLogOut } from 'react-icons/fi';
+import { FiChevronRight, FiGrid, FiLogOut, FiMenu, FiUser, FiX } from 'react-icons/fi';
 
 const Header = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -19,157 +24,155 @@ const Header = () => {
     return `/${role}/dashboard`;
   };
 
+  const publicLinks = [
+    { to: '/', label: 'Home' },
+    { to: '/about', label: 'About' },
+    { to: '/events', label: 'Events' },
+    { to: '/gallery', label: 'Gallery' },
+    { to: '/results', label: 'Results' },
+    { to: '/contact', label: 'Contact' }
+  ];
+
+  const getNavClass = ({ isActive }) =>
+    [
+      'rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
+      isActive
+        ? 'bg-primary text-white shadow-md'
+        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+    ].join(' ');
+
   return (
-    <header className="bg-neutral-2 shadow-md sticky top-0 z-50">
-      <nav className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/" className="text-2xl font-bold text-primary">
-            School Portal
-          </Link>
+    <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-lg">
+      <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+        <Link to="/" className="group inline-flex items-center gap-3">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-lg font-bold text-white shadow-lg shadow-primary/20">
+            S
+          </span>
+          <span className="flex flex-col leading-tight">
+            <span className="text-base font-bold tracking-tight text-slate-900 sm:text-lg">
+              School Portal
+            </span>
+            <span className="text-xs font-medium text-slate-500">Academic Management</span>
+          </span>
+        </Link>
 
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center space-x-6">
-            <Link to="/" className="text-neutral-3 hover:text-secondary transition">
-              Home
-            </Link>
-            <Link to="/about" className="text-neutral-3 hover:text-secondary transition">
-              About
-            </Link>
-            <Link to="/contact" className="text-neutral-3 hover:text-secondary transition">
-              Contact
-            </Link>
-            <Link to="/gallery" className="text-neutral-3 hover:text-secondary transition">
-              Gallery
-            </Link>
-            <Link to="/results" className="text-neutral-3 hover:text-secondary transition">
-              Results
-            </Link>
-
-            {user ? (
-              <div className="flex items-center space-x-4">
-                <Link
-                  to={getDashboardPath()}
-                  className="flex items-center space-x-2 text-neutral-3 hover:text-secondary transition"
-                >
-                  <FiUser />
-                  <span>Dashboard</span>
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center space-x-2 text-red-600 hover:text-red-700 transition"
-                >
-                  <FiLogOut />
-                  <span>Logout</span>
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-4">
-                <Link
-                  to="/login"
-                  className="text-neutral-3 hover:text-secondary transition"
-                >
-                  Login
-                </Link>
-                <Link
-                  to="/register"
-                  className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
-                >
-                  Register
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* Mobile Menu Button */}
-          <button
-            className="md:hidden text-neutral-3"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <FiX size={24} /> : <FiMenu size={24} />}
-          </button>
+        <div className="hidden items-center gap-1 lg:flex">
+          {publicLinks.map((item) => (
+            <NavLink key={item.to} to={item.to} className={getNavClass}>
+              {item.label}
+            </NavLink>
+          ))}
         </div>
 
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden mt-4 space-y-4 pb-4">
-            <Link
-              to="/"
-              className="block text-neutral-3 hover:text-secondary transition"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Home
-            </Link>
-            <Link
-              to="/about"
-              className="block text-neutral-3 hover:text-secondary transition"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              About
-            </Link>
-            <Link
-              to="/contact"
-              className="block text-neutral-3 hover:text-secondary transition"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Contact
-            </Link>
-            <Link
-              to="/gallery"
-              className="block text-neutral-3 hover:text-secondary transition"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Gallery
-            </Link>
-            <Link
-              to="/results"
-              className="block text-neutral-3 hover:text-secondary transition"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Results
-            </Link>
+        <div className="hidden items-center gap-3 lg:flex">
+          {user ? (
+            <>
+              <Link
+                to={getDashboardPath()}
+                className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+              >
+                <FiGrid />
+                <span>Dashboard</span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:border-red-300 hover:bg-red-100"
+              >
+                <FiLogOut />
+                <span>Logout</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <NavLink
+                to="/login"
+                className={({ isActive }) =>
+                  [
+                    'rounded-full px-4 py-2 text-sm font-semibold transition',
+                    isActive ? 'text-primary' : 'text-slate-600 hover:text-slate-900'
+                  ].join(' ')
+                }
+              >
+                Login
+              </NavLink>
+              <NavLink
+                to="/register"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-md shadow-primary/30 transition hover:bg-primary-600"
+              >
+                Register
+                <FiChevronRight />
+              </NavLink>
+            </>
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 lg:hidden"
+          onClick={() => setMobileMenuOpen((prev) => !prev)}
+          aria-label="Toggle navigation"
+        >
+          {mobileMenuOpen ? <FiX size={20} /> : <FiMenu size={20} />}
+        </button>
+      </nav>
+
+      {mobileMenuOpen && (
+        <div className="border-t border-slate-200 bg-white lg:hidden">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-4 sm:px-6">
+            {publicLinks.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  [
+                    'rounded-xl px-4 py-3 text-sm font-medium transition',
+                    isActive
+                      ? 'bg-primary text-white shadow-md'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  ].join(' ')
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+
+            <div className="my-1 h-px bg-slate-200" />
             {user ? (
               <>
-                <Link
+                <NavLink
                   to={getDashboardPath()}
-                  className="flex items-center space-x-2 text-neutral-3 hover:text-secondary transition"
-                  onClick={() => setMobileMenuOpen(false)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700"
                 >
                   <FiUser />
-                  <span>Dashboard</span>
-                </Link>
+                  <span>Go to Dashboard</span>
+                </NavLink>
                 <button
-                  onClick={() => {
-                    handleLogout();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="flex items-center space-x-2 text-red-600 hover:text-red-700 transition w-full"
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600"
                 >
                   <FiLogOut />
                   <span>Logout</span>
                 </button>
               </>
             ) : (
-              <>
-                <Link
+              <div className="grid grid-cols-2 gap-2">
+                <NavLink
                   to="/login"
-                  className="block text-neutral-3 hover:text-secondary transition"
-                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-xl border border-slate-200 px-4 py-3 text-center text-sm font-semibold text-slate-700"
                 >
                   Login
-                </Link>
-                <Link
+                </NavLink>
+                <NavLink
                   to="/register"
-                  className="block bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition text-center"
-                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-white"
                 >
                   Register
-                </Link>
-              </>
+                </NavLink>
+              </div>
             )}
           </div>
-        )}
-      </nav>
+        </div>
+      )}
     </header>
   );
 };

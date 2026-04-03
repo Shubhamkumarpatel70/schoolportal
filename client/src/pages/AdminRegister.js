@@ -65,70 +65,64 @@ const AdminRegister = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="ui-shell">
       <Header />
 
-      <div className="flex-grow bg-neutral-1 py-12">
-        <div className="container mx-auto px-4">
-          <div className="max-w-md mx-auto bg-neutral-2 rounded-lg shadow-lg p-8">
-            <div className="text-center mb-8">
-              <FiUserPlus className="text-5xl text-secondary mx-auto mb-4" />
-              <h2 className="text-3xl font-bold mb-2 text-neutral-3">Admin Registration</h2>
-              <p className="text-neutral-3/70">
+      <div className="flex-grow py-12 sm:py-16">
+        <div className="ui-container">
+          <div className="mx-auto max-w-lg ui-card p-6 sm:p-8">
+            <div className="mb-8 text-center">
+              <FiUserPlus className="mx-auto mb-4 text-5xl text-secondary" />
+              <h2 className="text-3xl font-bold text-slate-900">Admin Registration</h2>
+              <p className="mt-2 text-sm text-slate-600">
                 This page is only for creating the <span className="font-semibold">first admin</span>.
                 After an admin exists, please log in using the normal login page.
               </p>
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+              <div className="ui-status-error mb-4">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label className="block text-neutral-3 font-semibold mb-2">
-                  Full Name
-                </label>
+                <label className="ui-label">Full Name</label>
                 <div className="relative">
-                  <FiUser className="absolute left-3 top-3 text-neutral-3/40" />
+                  <FiUser className="absolute left-3 top-3.5 text-slate-400" />
                   <input
                     type="text"
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
                     required
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent bg-neutral-2"
+                    className="ui-input pl-10"
                     placeholder="Enter your full name"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-neutral-3 font-semibold mb-2">
-                  Email Address
-                </label>
+                <label className="ui-label">Email Address</label>
                 <div className="relative">
-                  <FiMail className="absolute left-3 top-3 text-neutral-3/40" />
+                  <FiMail className="absolute left-3 top-3.5 text-slate-400" />
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
                     required
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent bg-neutral-2"
+                    className="ui-input pl-10"
                     placeholder="Enter admin email"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-neutral-3 font-semibold mb-2">
-                  Password
-                </label>
+                <label className="ui-label">Password</label>
                 <div className="relative">
-                  <FiLock className="absolute left-3 top-3 text-neutral-3/40" />
+                  <FiLock className="absolute left-3 top-3.5 text-slate-400" />
                   <input
                     type="password"
                     name="password"
@@ -136,18 +130,16 @@ const AdminRegister = () => {
                     onChange={handleChange}
                     required
                     minLength={6}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent bg-neutral-2"
+                    className="ui-input pl-10"
                     placeholder="Enter a strong password"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-neutral-3 font-semibold mb-2">
-                  Confirm Password
-                </label>
+                <label className="ui-label">Confirm Password</label>
                 <div className="relative">
-                  <FiLock className="absolute left-3 top-3 text-neutral-3/40" />
+                  <FiLock className="absolute left-3 top-3.5 text-slate-400" />
                   <input
                     type="password"
                     name="confirmPassword"
@@ -155,7 +147,7 @@ const AdminRegister = () => {
                     onChange={handleChange}
                     required
                     minLength={6}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent bg-neutral-2"
+                    className="ui-input pl-10"
                     placeholder="Re-enter your password"
                   />
                 </div>
@@ -164,16 +156,16 @@ const AdminRegister = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ui-btn-primary w-full"
               >
                 {loading ? 'Registering...' : 'Register Admin'}
               </button>
             </form>
 
             <div className="mt-6 text-center">
-              <p className="text-neutral-3/70">
+              <p className="text-sm text-slate-600">
                 Already have an account?{' '}
-                <Link to="/login" className="text-secondary font-semibold hover:underline">
+                <Link to="/login" className="font-semibold text-secondary hover:underline">
                   Login here
                 </Link>
               </p>
