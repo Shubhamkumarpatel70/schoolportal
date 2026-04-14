@@ -413,9 +413,7 @@ const StudentDashboard = () => {
                   <div>
                     <label className="text-neutral-3/70 text-sm">Email</label>
                     <p className="text-neutral-3 font-semibold">
-                      {user?.email && !user.email.includes("@school.com")
-                        ? user.email
-                        : "Not Set"}
+                      {studentData.userId?.email || user?.email || "Not Set"}
                     </p>
                   </div>
                   <div>
@@ -426,9 +424,22 @@ const StudentDashboard = () => {
                       {studentData.studentType === "dayScholar"
                         ? "Day Scholar"
                         : "Hosteler"}
-                      {studentData.studentType === "dayScholar" &&
-                        studentData.busRoute &&
-                        ` (${studentData.busRoute})`}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-neutral-3/70 text-sm">
+                      Transport Opted
+                    </label>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.transportOpted ? "Yes" : "No"}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-neutral-3/70 text-sm">Bus Route</label>
+                    <p className="text-neutral-3 font-semibold">
+                      {studentData.transportOpted && studentData.busRoute
+                        ? studentData.busRoute
+                        : "Not Set"}
                     </p>
                   </div>
                   {classTeacher && (

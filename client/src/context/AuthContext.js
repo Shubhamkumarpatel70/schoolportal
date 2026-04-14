@@ -87,10 +87,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
-    setUser(null);
+  const logout = async () => {
+    try {
+      await axios.post(`${API_BASE_URL}/api/auth/logout`);
+    } catch (error) {
+      // Ignore API logout failures and clear local auth anyway.
+    } finally {
+      localStorage.removeItem('token');
+      delete axios.defaults.headers.common['Authorization'];
+      setUser(null);
+    }
   };
 
   return (

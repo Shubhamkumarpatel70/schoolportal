@@ -32,6 +32,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     sparse: true
   },
+  staffId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
   phone: {
     type: String
   },

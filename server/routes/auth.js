@@ -1,11 +1,30 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/User');
 const Student = require('../models/Student');
 const EnrollmentNumber = require('../models/EnrollmentNumber');
+const Session = require('../models/Session');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
+
+const getClientIp = (req) =>
+  req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+  req.socket?.remoteAddress ||
+  '';
+
+const createUserSession = async (userId, req) => {
+  const sessionId = crypto.randomBytes(24).toString('hex');
+  const session = new Session({
+    userId,
+    sessionId,
+    ipAddress: getClientIp(req),
+    userAgent: req.headers['user-agent'] || '',
+  });
+  await session.save();
+  return session;
+};
 
 // Student register (public) - uses enrollment number and creates/updates student user
 router.post('/register', async (req, res) => {
@@ -94,9 +113,11 @@ router.post('/register', async (req, res) => {
       }
     }
 
+    const session = await createUserSession(user._id, req);
+
     // Generate token
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user._id, sessionId: session.sessionId },
       process.env.JWT_SECRET || 'your_jwt_secret_key_change_this_in_production',
       { expiresIn: '7d' }
     );
@@ -144,8 +165,10 @@ router.post('/register-admin-initial', async (req, res) => {
 
     await user.save();
 
+    const session = await createUserSession(user._id, req);
+
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user._id, sessionId: session.sessionId },
       process.env.JWT_SECRET || 'your_jwt_secret_key_change_this_in_production',
       { expiresIn: '7d' }
     );
@@ -213,9 +236,11 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
+    const session = await createUserSession(user._id, req);
+
     // Generate token
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user._id, sessionId: session.sessionId },
       process.env.JWT_SECRET || 'your_jwt_secret_key_change_this_in_production',
       { expiresIn: '7d' }
     );
@@ -229,7 +254,8 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
         isDefaultPassword: user.isDefaultPassword,
-        studentId: user.studentId
+        studentId: user.studentId,
+        staffId: user.staffId
       }
     });
   } catch (error) {
@@ -242,6 +268,56 @@ router.get('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
     res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Logout current session
+router.post('/logout', auth, async (req, res) => {
+  try {
+    if (req.sessionId) {
+      await Session.findOneAndUpdate(
+        { sessionId: req.sessionId, userId: req.user._id, isActive: true },
+        { isActive: false, logoutAt: new Date() },
+      );
+    }
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Admin: list all sessions
+router.get('/sessions', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const sessions = await Session.find()
+      .sort({ loginAt: -1 })
+      .populate('userId', 'name email role staffId studentId');
+    res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Admin: logout any active session
+router.patch('/sessions/:sessionId/logout', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const session = await Session.findOneAndUpdate(
+      { _id: req.params.sessionId, isActive: true },
+      { isActive: false, logoutAt: new Date() },
+      { new: true },
+    ).populate('userId', 'name email role');
+    if (!session) {
+      return res.status(404).json({ message: 'Active session not found' });
+    }
+    res.json(session);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

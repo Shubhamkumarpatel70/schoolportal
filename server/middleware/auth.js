@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Session = require('../models/Session');
 
 const auth = async (req, res, next) => {
   try {
@@ -10,6 +11,19 @@ const auth = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret_key_change_this_in_production');
+    if (decoded.sessionId) {
+      const session = await Session.findOne({
+        sessionId: decoded.sessionId,
+        userId: decoded.userId,
+        isActive: true,
+      });
+      if (!session) {
+        return res.status(401).json({ message: 'Session expired or logged out' });
+      }
+      session.lastActiveAt = new Date();
+      await session.save();
+      req.sessionId = decoded.sessionId;
+    }
     const user = await User.findById(decoded.userId).select('-password');
     
     if (!user) {
@@ -17,6 +31,7 @@ const auth = async (req, res, next) => {
     }
 
     req.user = user;
+    req.tokenPayload = decoded;
     next();
   } catch (error) {
     res.status(401).json({ message: 'Token is not valid' });

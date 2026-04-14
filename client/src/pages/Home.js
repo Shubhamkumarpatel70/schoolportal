@@ -99,6 +99,22 @@ const Home = () => {
     { label: 'Portal Access', value: user ? 'Member' : 'Open', icon: FiUsers }
   ];  
 
+  const getNoticeCardClasses = (tag) => {
+    if (tag === 'urgent') return 'border-red-200 bg-red-50';
+    if (tag === 'new') return 'border-emerald-200 bg-emerald-50';
+    if (tag === 'festival') return 'border-purple-200 bg-purple-50';
+    if (tag === 'holiday') return 'border-amber-200 bg-amber-50';
+    return 'border-blue-200 bg-blue-50';
+  };
+
+  const getNoticeBadgeClasses = (tag) => {
+    if (tag === 'urgent') return 'bg-red-100 text-red-700';
+    if (tag === 'new') return 'bg-emerald-100 text-emerald-700';
+    if (tag === 'festival') return 'bg-purple-100 text-purple-700';
+    if (tag === 'holiday') return 'bg-amber-100 text-amber-700';
+    return 'bg-blue-100 text-blue-700';
+  };
+
   return (
     <div className="ui-shell">
       <Header />
@@ -220,7 +236,7 @@ const Home = () => {
       <section className="ui-section">
         <div className="ui-container">
           <div className="text-center">
-            <h2 className="ui-title">Why Families Trust Us</h2>
+            <h2 className="ui-title">Why Parents Trust Us</h2>
             <p className="ui-subtitle mx-auto max-w-2xl">
               Clear communication, strong academics, and measurable student progress.
             </p>
@@ -264,24 +280,12 @@ const Home = () => {
                 {notices.map((notice) => (
                   <article
                     key={notice._id}
-                    className={`rounded-xl border p-5 ${
-                      notice.tag === 'urgent'
-                        ? 'border-red-200 bg-red-50'
-                        : notice.tag === 'new'
-                        ? 'border-emerald-200 bg-emerald-50'
-                        : 'border-blue-200 bg-blue-50'
-                    }`}
+                    className={`rounded-xl border p-5 ${getNoticeCardClasses(notice.tag)}`}
                   >
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <h3 className="text-lg font-semibold text-slate-900">{notice.title}</h3>
                       <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                          notice.tag === 'urgent'
-                            ? 'bg-red-100 text-red-700'
-                            : notice.tag === 'new'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-blue-100 text-blue-700'
-                        }`}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${getNoticeBadgeClasses(notice.tag)}`}
                       >
                         {notice.tag || 'normal'}
                       </span>

@@ -10,7 +10,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 // API Routes
 app.use("/api/auth", require("./routes/auth"));
@@ -29,6 +29,7 @@ app.use("/api/teachers", require("./routes/teachers"));
 app.use("/api/fines", require("./routes/fines"));
 app.use("/api/examResults", require("./routes/examResults"));
 app.use("/api/notices", require("./routes/notices"));
+app.use("/api/announcements", require("./routes/announcements"));
 app.use("/api/attendance", require("./routes/attendance"));
 app.use("/api/holidays", require("./routes/holidays"));
 

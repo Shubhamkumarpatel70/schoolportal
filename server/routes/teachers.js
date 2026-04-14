@@ -4,6 +4,23 @@ const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
+const getStaffIdPrefix = (role) => (role === 'accountant' ? 'ACC' : 'TEA');
+
+const generateUniqueStaffId = async (role) => {
+  const prefix = getStaffIdPrefix(role);
+  let counter = await User.countDocuments({ role: { $in: ['teacher', 'accountant'] } });
+  if (!Number.isFinite(counter) || counter < 0) counter = 0;
+
+  let uniqueId = '';
+  let exists = true;
+  while (exists) {
+    counter += 1;
+    uniqueId = `${prefix}${String(counter).padStart(4, '0')}`;
+    exists = await User.exists({ staffId: uniqueId });
+  }
+  return uniqueId;
+};
+
 // Search teachers (Admin only)
 router.get('/search', auth, async (req, res) => {
   try {
@@ -19,7 +36,8 @@ router.get('/search', auth, async (req, res) => {
       $or: [
         { name: { $regex: q, $options: 'i' } },
         { email: { $regex: q, $options: 'i' } },
-        { phone: { $regex: q, $options: 'i' } }
+        { phone: { $regex: q, $options: 'i' } },
+        { staffId: { $regex: q, $options: 'i' } }
       ]
     }).limit(20);
     res.json(teachers);
@@ -61,12 +79,15 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'Role must be teacher or accountant' });
     }
 
+    const staffId = await generateUniqueStaffId(role);
+
     // Create user
     const user = new User({
       name,
       email,
       password: password || 'default123', // Default password if not provided
       role,
+      staffId,
       phone,
       address,
       qualification,
@@ -83,7 +104,8 @@ router.post('/', auth, async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        phone: user.phone
+        phone: user.phone,
+        staffId: user.staffId
       }
     });
   } catch (error) {

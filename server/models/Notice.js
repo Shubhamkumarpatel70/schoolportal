@@ -11,7 +11,7 @@ const noticeSchema = new mongoose.Schema({
   },
   tag: {
     type: String,
-    enum: ['new', 'urgent', 'normal'],
+    enum: ['new', 'urgent', 'normal', 'festival', 'holiday'],
     default: 'normal'
   },
   createdAt: {

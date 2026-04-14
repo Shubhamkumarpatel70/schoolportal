@@ -2,16 +2,33 @@ import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { FiChevronRight, FiGrid, FiLogOut, FiMenu, FiUser, FiX } from 'react-icons/fi';
+import axios from 'axios';
+import { API_BASE_URL } from '../utils/api';
 
 const Header = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [announcements, setAnnouncements] = useState([]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const fetchAnnouncements = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/announcements`);
+        setAnnouncements(res.data || []);
+      } catch (error) {
+        setAnnouncements([]);
+      }
+    };
+    fetchAnnouncements();
+    const intervalId = setInterval(fetchAnnouncements, 60000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -173,6 +190,28 @@ const Header = () => {
           </div>
         </div>
       )}
+      {location.pathname === '/' && announcements.length > 0 && (
+        <div className="border-t border-slate-200 bg-amber-50/90">
+          <div className="mx-auto flex w-full max-w-7xl items-center gap-2 overflow-hidden px-4 py-2 text-xs font-medium text-amber-900 sm:px-6 lg:px-8 sm:text-sm">
+            <span className="shrink-0 font-semibold">Announcements:</span>
+            <div className="relative w-full overflow-hidden">
+              <div className="inline-block min-w-full whitespace-nowrap animate-[marquee_25s_linear_infinite]">
+                {announcements
+                  .map((item) => `${item.title}: ${item.message}`)
+                  .join('   |   ')}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <style>
+        {`
+          @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+          }
+        `}
+      </style>
     </header>
   );
 };

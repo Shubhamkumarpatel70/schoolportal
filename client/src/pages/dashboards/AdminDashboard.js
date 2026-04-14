@@ -22,9 +22,8 @@ import {
   FiTrash2,
   FiDollarSign,
   FiAward,
+  FiLogOut,
 } from "react-icons/fi";
-
-const SUNDAY_OVERRIDE_TITLE = "Sunday Attendance Enabled";
 
 const AdminDashboard = () => {
   // Attendance states
@@ -54,6 +53,10 @@ const AdminDashboard = () => {
     description: "",
   });
   const [holidayActionLoading, setHolidayActionLoading] = useState(false);
+  const [
+    attendanceEnabledSundayDatesByMonth,
+    setAttendanceEnabledSundayDatesByMonth,
+  ] = useState({});
 
   const fetchAttendanceHolidays = async (month, year) => {
     const res = await axios.get(
@@ -73,10 +76,6 @@ const AdminDashboard = () => {
       setAttendanceError("Failed to refresh holidays.");
     }
   };
-
-  const isSundayAttendanceOverride = (holiday) =>
-    String(holiday?.title || "").trim().toLowerCase() ===
-    SUNDAY_OVERRIDE_TITLE.toLowerCase();
 
   const handleAttendanceFetch = async (e) => {
     e.preventDefault();
@@ -158,15 +157,14 @@ const AdminDashboard = () => {
       return;
     }
     const holidayOnSelectedDate = attendanceHolidays.find(
-      (holiday) =>
-        !isSundayAttendanceOverride(holiday) &&
-        toDateKeyYMD(holiday.date) === selectedIsoDate,
+      (holiday) => toDateKeyYMD(holiday.date) === selectedIsoDate,
     );
     const selectedDateObj = new Date(selectedIsoDate);
-    const isSunday = !Number.isNaN(selectedDateObj.getTime()) && selectedDateObj.getDay() === 0;
-    const isEnabledSunday = sundayEnabledOverrideDateSet.has(selectedIsoDate);
-    if (isSunday && !isEnabledSunday) {
-      setAttendanceError("Cannot mark attendance on holiday: Sunday Off");
+    const isSunday =
+      !Number.isNaN(selectedDateObj.getTime()) &&
+      selectedDateObj.getDay() === 0;
+    if (isSunday) {
+      setAttendanceError("Cannot mark attendance on holiday: Sunday Holiday");
       return;
     }
     if (holidayOnSelectedDate) {
@@ -202,7 +200,9 @@ const AdminDashboard = () => {
       setAttendanceHolidays(holidaysRes);
       const studentRecords = monthRecords.filter((record) => {
         const recordStudentId =
-          typeof record.student === "object" ? record.student?._id : record.student;
+          typeof record.student === "object"
+            ? record.student?._id
+            : record.student;
         return recordStudentId === attendanceStudentResult._id;
       });
       setAttendanceStudentMonthRecords(studentRecords);
@@ -221,11 +221,16 @@ const AdminDashboard = () => {
     }
   };
 
-  const selectAttendanceStudentFromMonthRecords = (studentInfo, monthRecords) => {
+  const selectAttendanceStudentFromMonthRecords = (
+    studentInfo,
+    monthRecords,
+  ) => {
     setAttendanceStudentResult(studentInfo);
     const studentRecords = (monthRecords || []).filter((record) => {
       const recordStudentId =
-        typeof record.student === "object" ? record.student?._id : record.student;
+        typeof record.student === "object"
+          ? record.student?._id
+          : record.student;
       return recordStudentId === studentInfo._id;
     });
     setAttendanceStudentMonthRecords(studentRecords);
@@ -248,7 +253,8 @@ const AdminDashboard = () => {
       return;
     }
     const matchedStudent = attendanceStudentCards.find(
-      (student) => String(student.rollNumber || "").toLowerCase() === normalizedRoll,
+      (student) =>
+        String(student.rollNumber || "").toLowerCase() === normalizedRoll,
     );
     if (!matchedStudent) {
       setAttendanceError("Roll number not found in fetched attendance.");
@@ -274,31 +280,11 @@ const AdminDashboard = () => {
     setHolidayActionLoading(true);
     setAttendanceError("");
     try {
-      const payload = {
+      await axios.post(`${API_BASE_URL}/api/holidays`, {
         title: holidayForm.title,
         date: holidayForm.date,
         description: holidayForm.description,
-      };
-      try {
-        await axios.post(`${API_BASE_URL}/api/holidays`, payload);
-      } catch (postError) {
-        // If this date was used for Sunday override, replace it with the manual holiday.
-        if (postError.response?.status === 409) {
-          const dateKey = toDateKeyYMD(holidayForm.date);
-          const overrideEntry = attendanceHolidays.find(
-            (holiday) =>
-              isSundayAttendanceOverride(holiday) &&
-              toDateKeyYMD(holiday.date) === dateKey,
-          );
-          if (!overrideEntry?._id) {
-            throw postError;
-          }
-          await axios.delete(`${API_BASE_URL}/api/holidays/${overrideEntry._id}`);
-          await axios.post(`${API_BASE_URL}/api/holidays`, payload);
-        } else {
-          throw postError;
-        }
-      }
+      });
       setHolidayForm((prev) => ({ ...prev, title: "", description: "" }));
       await refreshCurrentMonthHolidays();
       alert("Holiday added.");
@@ -322,34 +308,6 @@ const AdminDashboard = () => {
     } catch (error) {
       setAttendanceError(
         error.response?.data?.message || "Failed to delete holiday.",
-      );
-    } finally {
-      setHolidayActionLoading(false);
-    }
-  };
-
-  const handleToggleSundayWorking = async (dateKey) => {
-    const overrideEntry = attendanceHolidays.find(
-      (holiday) =>
-        isSundayAttendanceOverride(holiday) &&
-        toDateKeyYMD(holiday.date) === dateKey,
-    );
-    setHolidayActionLoading(true);
-    setAttendanceError("");
-    try {
-      if (overrideEntry?._id) {
-        await axios.delete(`${API_BASE_URL}/api/holidays/${overrideEntry._id}`);
-      } else {
-        await axios.post(`${API_BASE_URL}/api/holidays`, {
-          title: SUNDAY_OVERRIDE_TITLE,
-          date: dateKey,
-          description: "Allows attendance marking on Sunday",
-        });
-      }
-      await refreshCurrentMonthHolidays();
-    } catch (error) {
-      setAttendanceError(
-        error.response?.data?.message || "Failed to update Sunday toggle.",
       );
     } finally {
       setHolidayActionLoading(false);
@@ -387,6 +345,8 @@ const AdminDashboard = () => {
   const [examResults, setExamResults] = useState([]);
   const [selectedClassForExam, setSelectedClassForExam] = useState("");
   const [notices, setNotices] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [selectedClassForStudents, setSelectedClassForStudents] = useState("");
 
   // Form states
@@ -421,9 +381,12 @@ const AdminDashboard = () => {
   const [editingFee, setEditingFee] = useState(null);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [imageUploadType, setImageUploadType] = useState("link"); // 'link' or 'file'
+  const [eventImageUploadType, setEventImageUploadType] = useState("link");
   const [showTeacherForm, setShowTeacherForm] = useState(false);
   const [showNoticeForm, setShowNoticeForm] = useState(false);
   const [editingNotice, setEditingNotice] = useState(null);
+  const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState(null);
   const [feeStudentSearchQuery, setFeeStudentSearchQuery] = useState("");
   const [feeSearchResults, setFeeSearchResults] = useState([]);
   const [teacherSearchQuery, setTeacherSearchQuery] = useState("");
@@ -449,6 +412,7 @@ const AdminDashboard = () => {
     description: "",
     date: "",
     location: "",
+    image: "",
   });
   const [notificationForm, setNotificationForm] = useState({
     title: "",
@@ -524,6 +488,11 @@ const AdminDashboard = () => {
     title: "",
     message: "",
     tag: "normal",
+  });
+  const [announcementForm, setAnnouncementForm] = useState({
+    title: "",
+    message: "",
+    isActive: true,
   });
   const [showFineForm, setShowFineForm] = useState(false);
   const [editingFine, setEditingFine] = useState(null);
@@ -688,6 +657,8 @@ const AdminDashboard = () => {
         enrollmentNumbersRes,
         teachersRes,
         noticesRes,
+        announcementsRes,
+        sessionsRes,
       ] = await Promise.all([
         axios.get(`${API_BASE_URL}/api/users`),
         axios.get(`${API_BASE_URL}/api/events`),
@@ -703,6 +674,8 @@ const AdminDashboard = () => {
         axios.get(`${API_BASE_URL}/api/enrollmentNumbers`),
         axios.get(`${API_BASE_URL}/api/teachers`),
         axios.get(`${API_BASE_URL}/api/notices`),
+        axios.get(`${API_BASE_URL}/api/announcements/all`),
+        axios.get(`${API_BASE_URL}/api/auth/sessions`),
       ]);
 
       setUsers(usersRes.data);
@@ -719,6 +692,8 @@ const AdminDashboard = () => {
       setEnrollmentNumbers(enrollmentNumbersRes.data);
       setTeachers(teachersRes.data);
       setNotices(noticesRes.data);
+      setAnnouncements(announcementsRes.data);
+      setSessions(sessionsRes.data);
 
       setStats({
         users: usersRes.data.length,
@@ -809,7 +784,14 @@ const AdminDashboard = () => {
         alert("Event created successfully!");
       }
       setShowEventForm(false);
-      setEventForm({ title: "", description: "", date: "", location: "" });
+      setEventForm({
+        title: "",
+        description: "",
+        date: "",
+        location: "",
+        image: "",
+      });
+      setEventImageUploadType("link");
       fetchDashboardData();
     } catch (error) {
       console.error("Error creating/updating event:", error);
@@ -824,7 +806,9 @@ const AdminDashboard = () => {
       description: event.description,
       date: event.date ? new Date(event.date).toISOString().split("T")[0] : "",
       location: event.location || "",
+      image: event.image || "",
     });
+    setEventImageUploadType("link");
     setShowEventForm(true);
   };
 
@@ -1013,12 +997,25 @@ const AdminDashboard = () => {
   };
 
   const handleEditClassTeacher = (classTeacher) => {
+    const selectedTeacherId =
+      classTeacher?.teacherId?._id || classTeacher?.teacherId || "";
+    if (!selectedTeacherId) {
+      alert(
+        "This class assignment has no linked teacher account. Please reassign it.",
+      );
+      return;
+    }
     setEditingClassTeacher(classTeacher);
     setClassTeacherForm({
-      teacherId: classTeacher.teacherId._id || classTeacher.teacherId,
+      teacherId: selectedTeacherId,
       className: classTeacher.className,
       section: classTeacher.section || "",
     });
+    if (classTeacher?.teacherId?.name || classTeacher?.teacherId?.email) {
+      setTeacherSearchQuery(
+        `${classTeacher.teacherId.name || "Teacher"} (${classTeacher.teacherId.email || "N/A"})${classTeacher.teacherId.staffId ? ` [${classTeacher.teacherId.staffId}]` : ""}`,
+      );
+    }
   };
 
   const handleSubmitEnrollment = async (e) => {
@@ -1404,6 +1401,39 @@ const AdminDashboard = () => {
     setShowNoticeForm(true);
   };
 
+  const handleSubmitAnnouncement = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingAnnouncement) {
+        await axios.put(
+          `${API_BASE_URL}/api/announcements/${editingAnnouncement._id}`,
+          announcementForm,
+        );
+        setEditingAnnouncement(null);
+        alert("Announcement updated successfully!");
+      } else {
+        await axios.post(`${API_BASE_URL}/api/announcements`, announcementForm);
+        alert("Announcement added successfully!");
+      }
+      setShowAnnouncementForm(false);
+      setAnnouncementForm({ title: "", message: "", isActive: true });
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error creating/updating announcement:", error);
+      alert(error.response?.data?.message || "Error saving announcement");
+    }
+  };
+
+  const handleEditAnnouncement = (announcement) => {
+    setEditingAnnouncement(announcement);
+    setAnnouncementForm({
+      title: announcement.title,
+      message: announcement.message,
+      isActive: announcement.isActive !== false,
+    });
+    setShowAnnouncementForm(true);
+  };
+
   const handleImageUpload = (e, formType) => {
     const file = e.target.files[0];
     if (file) {
@@ -1414,6 +1444,8 @@ const AdminDashboard = () => {
           setCarouselForm({ ...carouselForm, image: base64String });
         } else if (formType === "gallery") {
           setGalleryForm({ ...galleryForm, image: base64String });
+        } else if (formType === "event") {
+          setEventForm({ ...eventForm, image: base64String });
         }
       };
       reader.readAsDataURL(file);
@@ -1437,11 +1469,22 @@ const AdminDashboard = () => {
         enrollmentNumber: `/api/enrollmentNumbers/${id}`,
         teacher: `/api/teachers/${id}`,
         notice: `/api/notices/${id}`,
+        announcement: `/api/announcements/${id}`,
       };
       await axios.delete(`${API_BASE_URL}${endpoints[type]}`);
       fetchDashboardData();
     } catch (error) {
       console.error("Error deleting:", error);
+    }
+  };
+
+  const handleLogoutSession = async (sessionId) => {
+    try {
+      await axios.patch(`${API_BASE_URL}/api/auth/sessions/${sessionId}/logout`);
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error logging out session:", error);
+      alert(error.response?.data?.message || "Error logging out session");
     }
   };
 
@@ -1464,16 +1507,7 @@ const AdminDashboard = () => {
     },
     {},
   );
-  const sundayEnabledOverrideDateSet = new Set(
-    attendanceHolidays
-      .filter((holiday) => isSundayAttendanceOverride(holiday))
-      .map((holiday) => toDateKeyYMD(holiday.date))
-      .filter(Boolean),
-  );
-  const nonOverrideAttendanceHolidays = attendanceHolidays.filter(
-    (holiday) => !isSundayAttendanceOverride(holiday),
-  );
-  const attendanceHolidayMap = nonOverrideAttendanceHolidays.reduce((acc, holiday) => {
+  const attendanceHolidayMap = attendanceHolidays.reduce((acc, holiday) => {
     acc[toDateKeyYMD(holiday.date)] = holiday;
     return acc;
   }, {});
@@ -1483,18 +1517,17 @@ const AdminDashboard = () => {
     const dateObj = new Date(attendanceYear, attendanceMonth - 1, day);
     if (dateObj.getDay() !== 0) continue;
     const dateKey = `${attendanceYear}-${String(attendanceMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    if (sundayEnabledOverrideDateSet.has(dateKey)) continue;
     if (attendanceHolidayMap[dateKey]) continue;
     virtualSundayHolidays.push({
       _id: `sunday-${dateKey}`,
-      title: "Sunday Off",
+      title: "Sunday Holiday",
       date: dateKey,
       description: "Weekly off (automatic)",
       isWeeklyOff: true,
     });
   }
   const attendanceHolidaysForDisplay = [
-    ...nonOverrideAttendanceHolidays.map((h) => ({ ...h, isWeeklyOff: false })),
+    ...attendanceHolidays.map((h) => ({ ...h, isWeeklyOff: false })),
     ...virtualSundayHolidays,
   ].sort(
     (a, b) =>
@@ -1507,11 +1540,10 @@ const AdminDashboard = () => {
     const dateObj = new Date(attendanceYear, attendanceMonth - 1, day);
     if (dateObj.getDay() !== 0) continue;
     const dateKey = `${attendanceYear}-${String(attendanceMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    if (sundayEnabledOverrideDateSet.has(dateKey)) continue;
     if (!attendanceCalendarHolidayMap[dateKey]) {
       attendanceCalendarHolidayMap[dateKey] = {
         _id: `sunday-${dateKey}`,
-        title: "Sunday Off",
+        title: "Sunday Holiday",
         date: dateKey,
         isWeeklyOff: true,
       };
@@ -1522,7 +1554,9 @@ const AdminDashboard = () => {
       const recordDateKey = toDateKeyYMD(record.date);
       if (attendanceCalendarHolidayMap[recordDateKey]) return acc;
       const studentId =
-        typeof record.student === "object" ? record.student?._id : record.student;
+        typeof record.student === "object"
+          ? record.student?._id
+          : record.student;
       if (!studentId) return acc;
       if (!acc[studentId]) {
         const fallbackStudent = students.find((s) => s._id === studentId);
@@ -1557,10 +1591,10 @@ const AdminDashboard = () => {
       };
     })
     .sort((a, b) =>
-    (a.rollNumber || "").localeCompare(b.rollNumber || "", undefined, {
-      numeric: true,
-    }),
-  );
+      (a.rollNumber || "").localeCompare(b.rollNumber || "", undefined, {
+        numeric: true,
+      }),
+    );
 
   const renderContent = () => {
     switch (activeTab) {
@@ -1642,7 +1676,10 @@ const AdminDashboard = () => {
                     className="border rounded px-3 py-2"
                     value={holidayForm.date}
                     onChange={(e) =>
-                      setHolidayForm((prev) => ({ ...prev, date: e.target.value }))
+                      setHolidayForm((prev) => ({
+                        ...prev,
+                        date: e.target.value,
+                      }))
                     }
                     required
                   />
@@ -1655,7 +1692,10 @@ const AdminDashboard = () => {
                     placeholder="e.g. Republic Day"
                     value={holidayForm.title}
                     onChange={(e) =>
-                      setHolidayForm((prev) => ({ ...prev, title: e.target.value }))
+                      setHolidayForm((prev) => ({
+                        ...prev,
+                        title: e.target.value,
+                      }))
                     }
                     required
                   />
@@ -1686,8 +1726,7 @@ const AdminDashboard = () => {
 
               <p className="text-sm text-neutral-3/70 mb-3">
                 Sunday Off is added automatically for every Sunday in the
-                selected month. Toggle Sunday to allow/disable attendance for
-                that date.
+                selected month. Use the form above to add other holidays.
               </p>
               {attendanceHolidaysForDisplay.length === 0 ? (
                 <p className="text-sm text-neutral-3/70">
@@ -1751,21 +1790,6 @@ const AdminDashboard = () => {
                           <FiTrash2 />
                         </button>
                       )}
-                      {holiday.isWeeklyOff && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleToggleSundayWorking(toDateKeyYMD(holiday.date))
-                          }
-                          disabled={holidayActionLoading}
-                          className="text-red-600 hover:text-red-700"
-                          title="Toggle Sunday attendance"
-                        >
-                          {sundayEnabledOverrideDateSet.has(toDateKeyYMD(holiday.date))
-                            ? "Off"
-                            : "On"}
-                        </button>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -1792,7 +1816,9 @@ const AdminDashboard = () => {
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 text-sm">Find by Roll Number</label>
+                    <label className="block mb-1 text-sm">
+                      Find by Roll Number
+                    </label>
                     <input
                       type="text"
                       className="border rounded px-3 py-2"
@@ -1860,7 +1886,9 @@ const AdminDashboard = () => {
                       {attendanceStudentResult.rollNumber || "-"}
                     </p>
                     <p className="mt-2 text-sm text-neutral-3/80">
-                      <span className="font-semibold">Status on selected date:</span>{" "}
+                      <span className="font-semibold">
+                        Status on selected date:
+                      </span>{" "}
                       {attendanceCalendarHolidayMap[attendanceDateInput]
                         ? `Holiday (${attendanceCalendarHolidayMap[attendanceDateInput].title})`
                         : attendanceSelectedStatus || "Not marked"}
@@ -1927,13 +1955,15 @@ const AdminDashboard = () => {
                                 holiday
                                   ? "bg-amber-50 border-amber-200"
                                   : status === "Present"
-                                  ? "bg-green-50 border-green-200"
-                                  : status === "Absent"
-                                    ? "bg-red-50 border-red-200"
-                                    : "bg-white border-neutral-1"
+                                    ? "bg-green-50 border-green-200"
+                                    : status === "Absent"
+                                      ? "bg-red-50 border-red-200"
+                                      : "bg-white border-neutral-1"
                               }`}
                             >
-                              <p className="font-semibold text-neutral-3">{day}</p>
+                              <p className="font-semibold text-neutral-3">
+                                {day}
+                              </p>
                               {holiday && (
                                 <p className="mt-1 text-amber-700 truncate">
                                   Holiday
@@ -2002,6 +2032,99 @@ const AdminDashboard = () => {
                   {stats.students}
                 </p>
               </div>
+            </div>
+          </div>
+        );
+
+      case "sessions":
+        return (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-neutral-3">
+                Active Sessions
+              </h2>
+            </div>
+            <div className="bg-neutral-2 rounded-lg shadow-md overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-primary text-white">
+                  <tr>
+                    <th className="px-4 py-3 text-left">User</th>
+                    <th className="px-4 py-3 text-left">Role</th>
+                    <th className="px-4 py-3 text-left">Login Date</th>
+                    <th className="px-4 py-3 text-left">Login Time</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.length === 0 ? (
+                    <tr>
+                      <td
+                        className="px-4 py-6 text-center text-neutral-3/70"
+                        colSpan={6}
+                      >
+                        No session history found.
+                      </td>
+                    </tr>
+                  ) : (
+                    sessions.map((session) => {
+                      const loginDate = session.loginAt
+                        ? new Date(session.loginAt)
+                        : null;
+                      return (
+                        <tr
+                          key={session._id}
+                          className="border-b border-neutral-1"
+                        >
+                          <td className="px-4 py-3 text-neutral-3">
+                            <div className="font-medium">
+                              {session.userId?.name || "Deleted User"}
+                            </div>
+                            <div className="text-xs text-neutral-3/70">
+                              {session.userId?.email || "N/A"}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3 capitalize">
+                            {session.userId?.role || "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3">
+                            {loginDate
+                              ? formatDateDDMMYYYY(loginDate)
+                              : "N/A"}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3">
+                            {loginDate
+                              ? loginDate.toLocaleTimeString()
+                              : "N/A"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-semibold ${
+                                session.isActive
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {session.isActive ? "Active" : "Logged Out"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              disabled={!session.isActive}
+                              onClick={() => handleLogoutSession(session._id)}
+                              className="inline-flex items-center space-x-1 rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <FiLogOut size={14} />
+                              <span>Logout</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         );
@@ -2206,6 +2329,7 @@ const AdminDashboard = () => {
                     <thead className="bg-primary text-white">
                       <tr>
                         <th className="px-4 py-3 text-left">Name</th>
+                        <th className="px-4 py-3 text-left">Unique ID</th>
                         <th className="px-4 py-3 text-left">Email</th>
                         <th className="px-4 py-3 text-left">Phone</th>
                         <th className="px-4 py-3 text-left">Role</th>
@@ -2220,6 +2344,9 @@ const AdminDashboard = () => {
                         >
                           <td className="px-4 py-3 text-neutral-3 font-medium">
                             {u.name}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-3">
+                            {u.staffId || u.studentId || "N/A"}
                           </td>
                           <td className="px-4 py-3 text-neutral-3">
                             {u.email}
@@ -2448,7 +2575,9 @@ const AdminDashboard = () => {
                       description: "",
                       date: "",
                       location: "",
+                      image: "",
                     });
+                    setEventImageUploadType("link");
                   }
                 }}
                 className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
@@ -2505,6 +2634,58 @@ const AdminDashboard = () => {
                     className="px-4 py-2 border rounded-lg"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm text-neutral-3/70 mb-2">
+                    Event Image
+                  </label>
+                  <div className="flex space-x-4 mb-3">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="link"
+                        checked={eventImageUploadType === "link"}
+                        onChange={(e) => setEventImageUploadType(e.target.value)}
+                        className="mr-2"
+                      />
+                      Image Link
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="file"
+                        checked={eventImageUploadType === "file"}
+                        onChange={(e) => setEventImageUploadType(e.target.value)}
+                        className="mr-2"
+                      />
+                      Upload File
+                    </label>
+                  </div>
+                  {eventImageUploadType === "link" ? (
+                    <input
+                      type="text"
+                      placeholder="Event image URL"
+                      value={eventForm.image}
+                      onChange={(e) =>
+                        setEventForm({ ...eventForm, image: e.target.value })
+                      }
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
+                  ) : (
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, "event")}
+                      className="w-full px-4 py-2 border rounded-lg"
+                    />
+                  )}
+                  {eventForm.image && (
+                    <img
+                      src={eventForm.image}
+                      alt="Event preview"
+                      className="mt-3 h-24 w-24 rounded object-cover border"
+                    />
+                  )}
+                </div>
                 <div className="flex space-x-2">
                   <button
                     type="submit"
@@ -2522,7 +2703,9 @@ const AdminDashboard = () => {
                         description: "",
                         date: "",
                         location: "",
+                        image: "",
                       });
+                      setEventImageUploadType("link");
                     }}
                     className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
                   >
@@ -2542,6 +2725,13 @@ const AdminDashboard = () => {
                     <p className="text-sm text-neutral-3/70">
                       {formatDateDDMMYYYY(e.date)}
                     </p>
+                    {e.image && (
+                      <img
+                        src={e.image}
+                        alt={e.title}
+                        className="mt-2 h-12 w-12 rounded object-cover border"
+                      />
+                    )}
                   </div>
                   <div className="flex space-x-2">
                     <button
@@ -4219,9 +4409,7 @@ const AdminDashboard = () => {
                             </td>
                             <td className="px-4 py-3 text-neutral-3">
                               <div className="flex flex-col">
-                                <span>
-                                  {formatDateDDMMYYYY(f.dueDate)}
-                                </span>
+                                <span>{formatDateDDMMYYYY(f.dueDate)}</span>
                                 {new Date(f.dueDate) < new Date() &&
                                   f.status !== "paid" && (
                                     <span className="text-xs text-red-600 font-semibold">
@@ -4313,7 +4501,7 @@ const AdminDashboard = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="Search by name, email, or phone"
+                    placeholder="Search by name, email, phone, or unique ID"
                     value={teacherSearchQuery}
                     onChange={(e) => {
                       setTeacherSearchQuery(e.target.value);
@@ -4346,7 +4534,7 @@ const AdminDashboard = () => {
                             }}
                             className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                           >
-                            {t.name} ({t.email}) - {t.role}
+                            {t.name} ({t.email}){t.staffId ? ` [${t.staffId}]` : ""} - {t.role}
                           </div>
                         ))
                       ) : (
@@ -4371,7 +4559,7 @@ const AdminDashboard = () => {
                       <option value="">Or select from list</option>
                       {teachers.map((t) => (
                         <option key={t._id} value={t._id}>
-                          {t.name} ({t.email})
+                          {t.name} ({t.email}){t.staffId ? ` [${t.staffId}]` : ""}
                         </option>
                       ))}
                     </select>
@@ -4448,6 +4636,7 @@ const AdminDashboard = () => {
                 <thead className="bg-primary text-white">
                   <tr>
                     <th className="px-4 py-3 text-left">Teacher Name</th>
+                    <th className="px-4 py-3 text-left">Unique ID</th>
                     <th className="px-4 py-3 text-left">Class</th>
                     <th className="px-4 py-3 text-left">Section</th>
                     <th className="px-4 py-3 text-left">Total Students</th>
@@ -4465,6 +4654,9 @@ const AdminDashboard = () => {
                           {ct.teacherId?.name || "N/A"}
                         </td>
                         <td className="px-4 py-3 text-neutral-3">
+                          {ct.teacherId?.staffId || "N/A"}
+                        </td>
+                        <td className="px-4 py-3 text-neutral-3">
                           {ct.className}
                         </td>
                         <td className="px-4 py-3 text-neutral-3">
@@ -4477,7 +4669,13 @@ const AdminDashboard = () => {
                           <div className="flex space-x-2">
                             <button
                               onClick={() => handleEditClassTeacher(ct)}
-                              className="text-secondary hover:text-secondary-600"
+                              className="text-secondary hover:text-secondary-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                              disabled={!ct.teacherId}
+                              title={
+                                ct.teacherId
+                                  ? "Edit class teacher assignment"
+                                  : "Teacher account is missing"
+                              }
                             >
                               <FiEdit />
                             </button>
@@ -4907,6 +5105,7 @@ const AdminDashboard = () => {
                 <thead className="bg-primary text-white">
                   <tr>
                     <th className="px-4 py-3 text-left">Name</th>
+                    <th className="px-4 py-3 text-left">Unique ID</th>
                     <th className="px-4 py-3 text-left">Email</th>
                     <th className="px-4 py-3 text-left">Phone</th>
                     <th className="px-4 py-3 text-left">Role</th>
@@ -4918,6 +5117,9 @@ const AdminDashboard = () => {
                   {teachers.map((t) => (
                     <tr key={t._id} className="border-b border-neutral-1">
                       <td className="px-4 py-3 text-neutral-3">{t.name}</td>
+                      <td className="px-4 py-3 text-neutral-3">
+                        {t.staffId || "N/A"}
+                      </td>
                       <td className="px-4 py-3 text-neutral-3">{t.email}</td>
                       <td className="px-4 py-3 text-neutral-3">
                         {t.phone || "N/A"}
@@ -5058,7 +5260,9 @@ const AdminDashboard = () => {
                               {enrollmentDetails.createdAt && (
                                 <p className="text-blue-600 text-xs mt-2">
                                   Created:{" "}
-                                  {formatDateDDMMYYYY(enrollmentDetails.createdAt)}
+                                  {formatDateDDMMYYYY(
+                                    enrollmentDetails.createdAt,
+                                  )}
                                 </p>
                               )}
                             </div>
@@ -5453,8 +5657,7 @@ const AdminDashboard = () => {
                             {group.examType.replace("-", " ")} Exam
                           </h3>
                           <p className="text-sm text-neutral-3/70">
-                            Date:{" "}
-                            {formatDateDDMMYYYY(group.examDate)}
+                            Date: {formatDateDDMMYYYY(group.examDate)}
                           </p>
                           <p className="text-xs text-neutral-3/50 mt-1">
                             Added by: {group.addedBy}
@@ -5543,6 +5746,157 @@ const AdminDashboard = () => {
           </div>
         );
 
+      case "announcements":
+        return (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-neutral-3">Announcements</h2>
+              <button
+                onClick={() => {
+                  setShowAnnouncementForm(!showAnnouncementForm);
+                  if (!showAnnouncementForm) {
+                    setEditingAnnouncement(null);
+                    setAnnouncementForm({
+                      title: "",
+                      message: "",
+                      isActive: true,
+                    });
+                  }
+                }}
+                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
+              >
+                <FiBell />
+                <span>Add Announcement</span>
+              </button>
+            </div>
+            {showAnnouncementForm && (
+              <form
+                onSubmit={handleSubmitAnnouncement}
+                className="bg-neutral-2 p-6 rounded-lg mb-6 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-neutral-3 mb-4">
+                  {editingAnnouncement ? "Edit Announcement" : "Add Announcement"}
+                </h3>
+                <input
+                  type="text"
+                  placeholder="Announcement Title"
+                  value={announcementForm.title}
+                  onChange={(e) =>
+                    setAnnouncementForm({
+                      ...announcementForm,
+                      title: e.target.value,
+                    })
+                  }
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                />
+                <textarea
+                  placeholder="Announcement Message"
+                  value={announcementForm.message}
+                  onChange={(e) =>
+                    setAnnouncementForm({
+                      ...announcementForm,
+                      message: e.target.value,
+                    })
+                  }
+                  required
+                  className="w-full px-4 py-2 border rounded-lg"
+                  rows="4"
+                />
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={announcementForm.isActive}
+                    onChange={(e) =>
+                      setAnnouncementForm({
+                        ...announcementForm,
+                        isActive: e.target.checked,
+                      })
+                    }
+                  />
+                  <span className="text-sm text-neutral-3/80">
+                    Show this announcement below navbar
+                  </span>
+                </label>
+                <div className="flex space-x-2">
+                  <button
+                    type="submit"
+                    className="bg-primary text-white px-4 py-2 rounded-lg"
+                  >
+                    {editingAnnouncement ? "Update" : "Add"} Announcement
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAnnouncementForm(false);
+                      setEditingAnnouncement(null);
+                      setAnnouncementForm({
+                        title: "",
+                        message: "",
+                        isActive: true,
+                      });
+                    }}
+                    className="bg-neutral-1 text-neutral-3 px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+            <div className="space-y-4">
+              {announcements.length === 0 ? (
+                <p className="text-neutral-3/70 text-center py-8">
+                  No announcements added yet
+                </p>
+              ) : (
+                announcements.map((announcement) => (
+                  <div
+                    key={announcement._id}
+                    className="bg-neutral-2 p-4 rounded-lg border-l-4 border-amber-500"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-semibold text-neutral-3 text-lg">
+                        {announcement.title}
+                      </h3>
+                      <div className="flex items-center space-x-2">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            announcement.isActive
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-200 text-slate-700"
+                          }`}
+                        >
+                          {announcement.isActive ? "Active" : "Hidden"}
+                        </span>
+                        <button
+                          onClick={() => handleEditAnnouncement(announcement)}
+                          className="text-secondary hover:text-secondary-600"
+                        >
+                          <FiEdit />
+                        </button>
+                        <button
+                          onClick={() =>
+                            handleDelete("announcement", announcement._id)
+                          }
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <FiTrash2 />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-neutral-3/70 mb-2">
+                      {announcement.message}
+                    </p>
+                    <p className="text-xs text-neutral-3/50">
+                      {formatDateDDMMYYYY(announcement.createdAt)}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        );
+
       case "notices":
         return (
           <div>
@@ -5604,6 +5958,8 @@ const AdminDashboard = () => {
                     <option value="normal">Normal</option>
                     <option value="new">New</option>
                     <option value="urgent">Urgent</option>
+                    <option value="festival">Festival</option>
+                    <option value="holiday">Holiday</option>
                   </select>
                 </div>
                 <div className="flex space-x-2">
@@ -5641,6 +5997,10 @@ const AdminDashboard = () => {
                         ? "border-red-500"
                         : notice.tag === "new"
                           ? "border-green-500"
+                          : notice.tag === "festival"
+                            ? "border-purple-500"
+                            : notice.tag === "holiday"
+                              ? "border-amber-500"
                           : "border-blue-500"
                     }`}
                   >
@@ -5655,6 +6015,10 @@ const AdminDashboard = () => {
                               ? "bg-red-100 text-red-800"
                               : notice.tag === "new"
                                 ? "bg-green-100 text-green-800"
+                                : notice.tag === "festival"
+                                  ? "bg-purple-100 text-purple-800"
+                                  : notice.tag === "holiday"
+                                    ? "bg-amber-100 text-amber-800"
                                 : "bg-blue-100 text-blue-800"
                           }`}
                         >
@@ -5662,6 +6026,10 @@ const AdminDashboard = () => {
                             ? "Urgent"
                             : notice.tag === "new"
                               ? "New"
+                              : notice.tag === "festival"
+                                ? "Festival"
+                                : notice.tag === "holiday"
+                                  ? "Holiday"
                               : "Normal"}
                         </span>
                         <button
@@ -5698,22 +6066,24 @@ const AdminDashboard = () => {
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: FiSettings },
+    { id: "sessions", label: "Sessions", icon: FiLogOut },
     { id: "users", label: "Manage Users", icon: FiUsers },
     { id: "addTeacher", label: "Add Teacher", icon: FiUserPlus },
-    { id: "notifications", label: "Notifications", icon: FiBell },
-    { id: "events", label: "Events", icon: FiCalendar },
-    { id: "carousel", label: "Carousel", icon: FiImage },
-    { id: "contacts", label: "Contact Queries", icon: FiMail },
-    { id: "gallery", label: "Gallery", icon: FiImage },
     { id: "classes", label: "Classes", icon: FiFileText },
     { id: "classTeachers", label: "Class Teachers", icon: FiUsers },
     { id: "enrollmentNumbers", label: "Enrollment Numbers", icon: FiFileText },
     { id: "students", label: "Students", icon: FiUserPlus },
+    { id: "attendance", label: "Attendance", icon: FiCalendar },
     { id: "fees", label: "Fees", icon: FiDollarSign },
     { id: "fines", label: "Fines", icon: FiDollarSign },
     { id: "examResults", label: "Exam Results", icon: FiAward },
+    { id: "events", label: "Events", icon: FiCalendar },
     { id: "notices", label: "Notices", icon: FiBell },
-    { id: "attendance", label: "Attendance", icon: FiCalendar },
+    { id: "announcements", label: "Announcements", icon: FiBell },
+    { id: "notifications", label: "Notifications", icon: FiBell },
+    { id: "carousel", label: "Carousel", icon: FiImage },
+    { id: "gallery", label: "Gallery", icon: FiImage },
+    { id: "contacts", label: "Contact Queries", icon: FiMail },
   ];
 
   const activeMenuLabel =
@@ -5734,7 +6104,7 @@ const AdminDashboard = () => {
 
         {/* Sidebar */}
         <aside
-          className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-40 w-72 overflow-y-auto border-r border-white/10 bg-primary text-white shadow-2xl transition-transform duration-300 lg:static lg:translate-x-0`}
+          className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-40 w-72 shrink-0 overflow-y-auto border-r border-white/10 bg-primary text-white shadow-2xl transition-transform duration-300 lg:static lg:translate-x-0`}
         >
           <div className="p-4 lg:pt-6">
             <div className="flex items-center justify-between mb-6">
@@ -5777,7 +6147,7 @@ const AdminDashboard = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:ml-0">
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:ml-0">
           <div className="mb-5 rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm sm:px-6">
             <div className="flex items-center justify-between gap-3">
               <div>

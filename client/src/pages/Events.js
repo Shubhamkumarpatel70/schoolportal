@@ -121,8 +121,18 @@ const Events = () => {
                     key={event._id}
                     className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md transition hover:-translate-y-1 hover:shadow-xl"
                   >
-                    <div className="flex h-44 items-center justify-center bg-gradient-to-br from-secondary to-primary">
-                      <FiCalendar className="text-6xl text-white/70 transition group-hover:scale-110" />
+                    <div className="h-44 overflow-hidden bg-gradient-to-br from-secondary to-primary">
+                      {event.image ? (
+                        <img
+                          src={event.image}
+                          alt={event.title}
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center">
+                          <FiCalendar className="text-6xl text-white/70 transition group-hover:scale-110" />
+                        </div>
+                      )}
                     </div>
                     <div className="p-6">
                       <h3 className="text-xl font-bold text-slate-900">{event.title}</h3>

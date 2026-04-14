@@ -520,6 +520,11 @@ const TeacherDashboard = () => {
             <p className="mt-1 text-sm text-slate-600 sm:text-base">
               Welcome back, {user?.name}
             </p>
+            {user?.staffId && (
+              <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                Unique ID: {user.staffId}
+              </p>
+            )}
             {classTeacher && (
               <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
                 Class {classTeacher.className}{" "}
