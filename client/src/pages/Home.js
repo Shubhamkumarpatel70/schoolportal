@@ -120,7 +120,7 @@ const Home = () => {
       <Header />
 
       {carouselImages.length > 0 && (
-        <section className="relative h-[420px] overflow-hidden sm:h-[520px]">
+        <section className="relative h-[320px] overflow-hidden sm:h-[420px] lg:h-[520px]">
           {carouselImages.map((item, index) => (
             <div
               key={item._id}
@@ -140,11 +140,11 @@ const Home = () => {
                       <p className="mb-4 inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider">
                         Welcome to School Portal
                       </p>
-                      {item.title && <h1 className="text-3xl font-bold sm:text-4xl lg:text-5xl">{item.title}</h1>}
+                      {item.title && <h1 className="text-2xl font-bold sm:text-4xl lg:text-5xl">{item.title}</h1>}
                       {item.description && (
-                        <p className="mt-4 text-sm text-white/90 sm:text-base lg:text-lg">{item.description}</p>
+                        <p className="mt-3 line-clamp-3 text-xs text-white/90 sm:mt-4 sm:text-base lg:text-lg">{item.description}</p>
                       )}
-                      <div className="mt-8 flex flex-wrap gap-3">
+                      <div className="mt-5 flex flex-wrap gap-2 sm:mt-8 sm:gap-3">
                         <Link to="/register" className="ui-btn-primary bg-accent text-primary hover:bg-accent-600">
                           Start Enrollment
                         </Link>
@@ -162,17 +162,17 @@ const Home = () => {
             <>
               <button
                 onClick={prevSlide}
-                className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/20 p-2 text-white transition hover:bg-black/40"
+                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/20 p-1.5 text-white transition hover:bg-black/40 sm:left-4 sm:p-2"
                 aria-label="Previous slide"
               >
-                <FiChevronLeft size={24} />
+                <FiChevronLeft size={20} />
               </button>
               <button
                 onClick={nextSlide}
-                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/20 p-2 text-white transition hover:bg-black/40"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/20 p-1.5 text-white transition hover:bg-black/40 sm:right-4 sm:p-2"
                 aria-label="Next slide"
               >
-                <FiChevronRight size={24} />
+                <FiChevronRight size={20} />
               </button>
               <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 space-x-2">
                 {carouselImages.map((_, index) => (
@@ -212,20 +212,22 @@ const Home = () => {
 
       <section className="ui-section py-8 sm:py-10">
         <div className="ui-container">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             {spotlightStats.map((item, index) => {
               const Icon = item.icon;
               return (
                 <article
                   key={item.label}
-                  className="ui-stat-card ui-fade-up"
+                  className="ui-stat-card ui-fade-up p-4 sm:p-5"
                   style={{ animationDelay: `${index * 70}ms` }}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="ui-badge">{item.label}</span>
-                    <Icon className="text-lg text-secondary" />
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
+                      {item.label}
+                    </span>
+                    <Icon className="mt-0.5 shrink-0 text-base text-secondary sm:text-lg" />
                   </div>
-                  <p className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">{item.value}</p>
+                  <p className="mt-3 text-2xl font-bold text-slate-900 sm:mt-4 sm:text-3xl">{item.value}</p>
                 </article>
               );
             })}
@@ -236,7 +238,7 @@ const Home = () => {
       <section className="ui-section">
         <div className="ui-container">
           <div className="text-center">
-            <h2 className="ui-title">Why Parents Trust Us</h2>
+            <h2 className="text-4xl font-bold text-slate-900 sm:text-4xl">Why Parents Trust Us</h2>
             <p className="ui-subtitle mx-auto max-w-2xl">
               Clear communication, strong academics, and measurable student progress.
             </p>
@@ -309,13 +311,13 @@ const Home = () => {
       <section className="ui-section">
         <div className="ui-container">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="ui-card p-6 sm:p-8">
-              <div className="mb-6 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
+            <div className="ui-card p-5 sm:p-8">
+              <div className="mb-5 flex items-start justify-between gap-2 sm:mb-6 sm:gap-3">
+                <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900 sm:text-2xl">
                   <FiCalendar className="text-secondary" />
                   Upcoming Events
                 </h2>
-                <Link to="/events" className="text-sm font-semibold text-secondary hover:underline">
+                <Link to="/events" className="shrink-0 whitespace-nowrap pt-1 text-sm font-semibold leading-tight text-secondary hover:underline">
                   View all
                 </Link>
               </div>
@@ -342,13 +344,13 @@ const Home = () => {
               </div>
             </div>
 
-            <div className="ui-card p-6 sm:p-8">
-              <div className="mb-6 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900">
+            <div className="ui-card p-5 sm:p-8">
+              <div className="mb-5 flex items-start justify-between gap-2 sm:mb-6 sm:gap-3">
+                <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900 sm:text-2xl">
                   <FiBell className="text-secondary" />
                   Notifications
                 </h2>
-                <Link to="/notifications" className="text-sm font-semibold text-secondary hover:underline">
+                <Link to="/notifications" className="shrink-0 whitespace-nowrap pt-1 text-sm font-semibold leading-tight text-secondary hover:underline">
                   View all
                 </Link>
               </div>
