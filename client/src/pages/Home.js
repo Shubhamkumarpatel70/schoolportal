@@ -17,8 +17,10 @@ import {
   FiChevronRight,
   FiLayout,
   FiTrendingUp,
-  FiUsers
+  FiUsers,
+  FiUserPlus
 } from 'react-icons/fi';
+import AdmissionForm from '../components/AdmissionForm';
 
 const Home = () => {
   const { user } = useAuth();
@@ -28,13 +30,26 @@ const Home = () => {
   const [events, setEvents] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [notices, setNotices] = useState([]);
+  const [admissionConfig, setAdmissionConfig] = useState(null);
+  const [showPopup, setShowPopup] = useState(false);
 
   useEffect(() => {
     fetchCarousel();
     fetchEvents();
     fetchNotifications();
     fetchNotices();
+    fetchAdmissionConfig();
   }, []);
+
+  const fetchAdmissionConfig = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/admissions/config`);
+      setAdmissionConfig(res.data);
+      if (res.data.isOpen && res.data.displayType === 'popup') {
+        setTimeout(() => setShowPopup(true), 2000);
+      }
+    } catch (e) { console.error(e); }
+  };
 
   useEffect(() => {
     if (carouselImages.length > 0) {
@@ -415,6 +430,13 @@ const Home = () => {
       </section>
 
       <Footer />
+      {showPopup && admissionConfig && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 md:p-10 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+           <div className="bg-white w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden animate-slideUp relative flex flex-col">
+              <AdmissionForm session={admissionConfig.session} onClose={() => setShowPopup(false)} />
+           </div>
+        </div>
+      )}
     </div>
   );
 };

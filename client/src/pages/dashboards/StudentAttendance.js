@@ -197,6 +197,9 @@ const StudentAttendance = ({ user }) => {
                     ? `${monthSummary.percent}%`
                     : "—"}
                 </p>
+                {monthSummary.percent < 75 && monthSummary.percent !== null && (
+                  <p className="text-[10px] text-red-600 font-bold uppercase mt-1 animate-pulse">Low Attendance Alert</p>
+                )}
               </div>
               <div className="text-sm text-neutral-3">
                 <span className="text-green-700 font-medium">

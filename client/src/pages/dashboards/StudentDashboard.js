@@ -5,958 +5,210 @@ import Header from "../../components/Header";
 import Footer from "../../components/Footer";
 import axios from "axios";
 import { API_BASE_URL } from "../../utils/api";
-import { formatDateDDMMYYYY } from "../../utils/date";
-import { getMonthAttendanceSummaryFromRecords } from "../../utils/attendanceStats";
 import {
-  FiCalendar,
-  FiBell,
-  FiClock,
-  FiUser,
-  FiDollarSign,
-  FiUsers,
-  FiCheckCircle,
+  FiCalendar, FiBell, FiDollarSign, FiUser, FiCheckCircle, FiBookOpen, FiLogOut, FiMenu, FiFileText, FiBook
 } from "react-icons/fi";
+
+// Modular Components
+import StudentProfile from "../../components/student/StudentProfile";
+import StudentExams from "../../components/student/StudentExams";
 import StudentAttendance from "./StudentAttendance";
+import CircularView from "../../components/CircularView";
+import LeaveManagement from "../../components/LeaveManagement";
+import StudentLibraryView from "../../components/StudentLibraryView";
+import AssignmentManagement from "../../components/AssignmentManagement";
 
 const StudentDashboard = () => {
-  const { user, changePassword, fetchUser } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // States
   const [studentData, setStudentData] = useState(null);
   const [fees, setFees] = useState([]);
   const [fines, setFines] = useState([]);
   const [events, setEvents] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [classTeacher, setClassTeacher] = useState(null);
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({
-    enrollmentNumber: "",
-    name: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-  const [monthAttendanceOverview, setMonthAttendanceOverview] = useState(null);
-
-  useEffect(() => {
-    if (user?.role !== "student") {
-      navigate("/");
-      return;
-    }
-    fetchData();
-  }, [user, navigate]);
-
-  useEffect(() => {
-    // Check if user has default password after data is loaded
-    if (user?.isDefaultPassword && studentData) {
-      setShowChangePassword(true);
-      setPasswordForm({
-        enrollmentNumber: studentData.enrollmentNumber || user?.studentId || "",
-        name: studentData.studentName || user?.name || "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-    }
-  }, [user, studentData]);
-
-  useEffect(() => {
-    if (studentData?.class) {
-      fetchClassTeacher();
-    }
-  }, [studentData]);
-
-  useEffect(() => {
-    if (!studentData?._id) {
-      setMonthAttendanceOverview(null);
-      return;
-    }
-    const month = new Date().getMonth() + 1;
-    const year = new Date().getFullYear();
-    let cancelled = false;
-    setMonthAttendanceOverview({ loading: true, summary: null });
-    (async () => {
-      try {
-        const [attRes, holRes] = await Promise.all([
-          axios.get(
-            `${API_BASE_URL}/api/attendance/student/${studentData._id}?month=${month}&year=${year}`,
-          ),
-          axios.get(`${API_BASE_URL}/api/holidays?month=${month}&year=${year}`),
-        ]);
-        if (cancelled) return;
-        const summary = getMonthAttendanceSummaryFromRecords(
-          year,
-          month,
-          attRes.data || [],
-          holRes.data || [],
-        );
-        setMonthAttendanceOverview({ loading: false, summary });
-      } catch (e) {
-        if (!cancelled) {
-          setMonthAttendanceOverview({ loading: false, summary: null });
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [studentData]);
+  const [stats, setStats] = useState({ fees: 0, exams: 0, attendance: "—" });
 
   const fetchData = async () => {
     try {
       const userId = user?._id || user?.id;
-      if (!userId) {
-        console.error("User ID not found");
-        return;
-      }
-      const [studentRes, feesRes, finesRes, eventsRes, notificationsRes] =
-        await Promise.all([
-          axios.get(`${API_BASE_URL}/api/students/${userId}`),
-          axios.get(`${API_BASE_URL}/api/fees/student/${userId}`),
-          axios
-            .get(`${API_BASE_URL}/api/fines/student/${userId}`)
-            .catch(() => ({ data: [] })),
-          axios.get(`${API_BASE_URL}/api/events`),
-          axios
-            .get(`${API_BASE_URL}/api/notifications`)
-            .catch(() => ({ data: [] })),
-        ]);
+      const [studentRes, feesRes, finesRes, eventsRes, notificationsRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/api/students/${userId}`),
+        axios.get(`${API_BASE_URL}/api/fees/student/${userId}`),
+        axios.get(`${API_BASE_URL}/api/fines/student/${userId}`).catch(() => ({ data: [] })),
+        axios.get(`${API_BASE_URL}/api/events`),
+        axios.get(`${API_BASE_URL}/api/notifications`).catch(() => ({ data: [] })),
+      ]);
+
       setStudentData(studentRes.data);
       setFees(feesRes.data);
       setFines(finesRes.data || []);
-      setEvents(eventsRes.data.slice(0, 10));
-      setNotifications(notificationsRes.data?.slice(0, 10) || []);
+      setEvents(eventsRes.data.slice(0, 5));
+      setNotifications(notificationsRes.data.slice(0, 5));
+
+      setStats({
+        fees: feesRes.data.filter(f => f.status === "pending").length,
+        exams: 0, // Will be updated if schedules are fetched
+        attendance: "—"
+      });
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("Error fetching student data", error);
     }
   };
 
-  const fetchClassTeacher = async () => {
-    try {
-      const res = await axios.get(
-        `${API_BASE_URL}/api/classTeachers/class/${studentData.class}`,
-      );
-      setClassTeacher(res.data);
-    } catch (error) {
-      console.error("Error fetching class teacher:", error);
-      setClassTeacher(null);
-    }
-  };
+  useEffect(() => {
+    if (!user || user.role !== "student") navigate("/login");
+    fetchData();
+  }, [user, navigate]);
 
-  const handlePayFee = async (feeId, paymentData) => {
-    try {
-      await axios.put(`${API_BASE_URL}/api/fees/${feeId}/pay`, paymentData);
-      fetchData();
-      alert("Fee payment submitted successfully!");
-    } catch (error) {
-      console.error("Error paying fee:", error);
-      alert("Error submitting payment");
-    }
-  };
-
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert("New password and confirm password do not match");
-      return;
-    }
-    if (passwordForm.newPassword.length < 6) {
-      alert("Password must be at least 6 characters long");
-      return;
-    }
-
-    try {
-      // For default password, pass null as currentPassword (backend will skip validation)
-      const currentPassword = user?.isDefaultPassword
-        ? null
-        : passwordForm.enrollmentNumber;
-      const userId = user?._id || user?.id;
-      const result = await changePassword(
-        userId,
-        currentPassword,
-        passwordForm.newPassword,
-      );
-      if (result.success) {
-        alert(
-          "Password changed successfully! Please login again with your new password.",
-        );
-        setShowChangePassword(false);
-        setPasswordForm({
-          enrollmentNumber: "",
-          name: "",
-          newPassword: "",
-          confirmPassword: "",
-        });
-        // Refresh user data
-        await fetchUser();
-      } else {
-        alert(result.message || "Failed to change password");
-      }
-    } catch (error) {
-      console.error("Error changing password:", error);
-      alert("Error changing password");
-    }
-  };
-
-  const tabs = [
-    { id: "profile", label: "Profile", icon: FiUser },
-    { id: "fee", label: "Fee Submission", icon: FiDollarSign },
-    { id: "classTeacher", label: "Class Teacher", icon: FiUsers },
-    { id: "notifications", label: "Notifications", icon: FiBell },
-    { id: "events", label: "Events", icon: FiCalendar },
-    { id: "attendance", label: "Attendance", icon: FiCalendar },
+  const menuItems = [
+    { id: "dashboard", label: "Overview", icon: <FiCheckCircle /> },
+    { id: "profile", label: "My Profile", icon: <FiUser /> },
+    { id: "exams", label: "Exams & Results", icon: <FiBookOpen /> },
+    { id: "fees", label: "Fee Details", icon: <FiDollarSign /> },
+    { id: "assignments", label: "Assignments", icon: <FiBookOpen /> },
+    { id: "attendance", label: "Attendance", icon: <FiCalendar /> },
+    { id: "leaves", label: "Leaves", icon: <FiCalendar /> },
+    { id: "library", label: "Library", icon: <FiBook /> },
+    { id: "circulars", label: "Circulars", icon: <FiFileText /> },
   ];
-
-  const dashboardStats = useMemo(() => {
-    let attendanceValue = "—";
-    let attendanceHint =
-      "Working days = Present + Absent (excluding holidays)";
-
-    if (studentData?._id) {
-      if (!monthAttendanceOverview || monthAttendanceOverview.loading) {
-        attendanceValue = "…";
-      } else {
-        const s = monthAttendanceOverview.summary;
-        if (s && s.workingDays > 0 && s.percent != null) {
-          attendanceValue = `${s.percent}%`;
-          attendanceHint = `Present ${s.present} · Absent ${s.absent} · Working days ${s.workingDays}`;
-        }
-      }
-    } else {
-      attendanceHint = "";
-    }
-
-    return [
-      { label: "Total Fees", value: fees.length, icon: FiDollarSign },
-      {
-        label: "Pending Fees",
-        value: fees.filter((fee) => fee.status === "pending").length,
-        icon: FiDollarSign,
-      },
-      {
-        label: "Attendance (this month)",
-        value: attendanceValue,
-        icon: FiCheckCircle,
-        hint: attendanceHint,
-      },
-      { label: "Notifications", value: notifications.length, icon: FiBell },
-      { label: "Upcoming Events", value: events.length, icon: FiCalendar },
-    ];
-  }, [fees, notifications, events, monthAttendanceOverview, studentData?._id]);
 
   const renderContent = () => {
     switch (activeTab) {
-      case "attendance":
+      case "dashboard":
         return (
-          <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
-              My Attendance
-            </h2>
-            <StudentAttendance user={user} />
+          <div className="space-y-8 animate-fadeIn">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <StatCard label="Pending Fees" value={stats.fees} icon={<FiDollarSign className="text-red-500" />} color="bg-red-50" />
+              <StatCard label="Notifications" value={notifications.length} icon={<FiBell className="text-blue-500" />} color="bg-blue-50" />
+              <StatCard label="Recent Events" value={events.length} icon={<FiCalendar className="text-green-500" />} color="bg-green-50" />
+            </div>
+            <div className="bg-neutral-2 p-6 rounded-2xl border border-neutral-1 shadow-sm">
+              <h3 className="text-lg font-bold text-neutral-3 mb-4">Latest School News</h3>
+              <div className="space-y-4">
+                {notifications.map(n => (
+                  <div key={n._id} className="p-4 bg-white rounded-xl border border-neutral-1">
+                    <p className="font-bold text-neutral-3">{n.title}</p>
+                    <p className="text-xs opacity-60 mt-1">{n.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         );
       case "profile":
-        return (
-          <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
-              My Profile
-            </h2>
-
-            {/* Change Password Modal/Form - Show if default password */}
-            {showChangePassword && user?.isDefaultPassword && (
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-lg">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0">
-                    <span className="text-yellow-400 text-xl">⚠️</span>
-                  </div>
-                  <div className="ml-3 flex-1">
-                    <h3 className="text-sm font-medium text-yellow-800 mb-2">
-                      Change Your Default Password
-                    </h3>
-                    <p className="text-sm text-yellow-700 mb-4">
-                      You are using the default password. Please change it to
-                      secure your account.
-                    </p>
-                    <form onSubmit={handleChangePassword} className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-yellow-800 mb-1">
-                            Enrollment Number
-                          </label>
-                          <input
-                            type="text"
-                            value={passwordForm.enrollmentNumber}
-                            disabled
-                            className="w-full px-4 py-2 border border-yellow-300 rounded-lg bg-yellow-50 text-yellow-900"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-yellow-800 mb-1">
-                            Name
-                          </label>
-                          <input
-                            type="text"
-                            value={passwordForm.name}
-                            disabled
-                            className="w-full px-4 py-2 border border-yellow-300 rounded-lg bg-yellow-50 text-yellow-900"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-yellow-800 mb-1">
-                            New Password <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="password"
-                            value={passwordForm.newPassword}
-                            onChange={(e) =>
-                              setPasswordForm({
-                                ...passwordForm,
-                                newPassword: e.target.value,
-                              })
-                            }
-                            required
-                            minLength={6}
-                            className="w-full px-4 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
-                            placeholder="Enter new password (min 6 characters)"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-yellow-800 mb-1">
-                            Re-enter New Password{" "}
-                            <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="password"
-                            value={passwordForm.confirmPassword}
-                            onChange={(e) =>
-                              setPasswordForm({
-                                ...passwordForm,
-                                confirmPassword: e.target.value,
-                              })
-                            }
-                            required
-                            minLength={6}
-                            className="w-full px-4 py-2 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500"
-                            placeholder="Re-enter new password"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          type="submit"
-                          className="bg-yellow-600 text-white px-6 py-2 rounded-lg hover:bg-yellow-700 font-semibold"
-                        >
-                          Update Password
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {studentData ? (
-              <div className="bg-neutral-2 rounded-lg shadow-md p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Student Name
-                    </label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.studentName}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">Class</label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.class}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Roll Number
-                    </label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.rollNumber}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Enrollment Number
-                    </label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.enrollmentNumber}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Father's Name
-                    </label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.fathersName}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Mother's Name
-                    </label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.mothersName}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Mobile Number
-                    </label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.mobileNumber}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">Email</label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.userId?.email || user?.email || "Not Set"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Student Type
-                    </label>
-                    <p className="text-neutral-3 font-semibold capitalize">
-                      {studentData.studentType === "dayScholar"
-                        ? "Day Scholar"
-                        : "Hosteler"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Transport Opted
-                    </label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.transportOpted ? "Yes" : "No"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">Bus Route</label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.transportOpted && studentData.busRoute
-                        ? studentData.busRoute
-                        : "Not Set"}
-                    </p>
-                  </div>
-                  {classTeacher && (
-                    <div className="md:col-span-2">
-                      <label className="text-neutral-3/70 text-sm">
-                        Class Teacher
-                      </label>
-                      <p className="text-neutral-3 font-semibold">
-                        {classTeacher.teacherId?.name || "N/A"}
-                        {classTeacher.teacherId?.email &&
-                          ` (${classTeacher.teacherId.email})`}
-                      </p>
-                    </div>
-                  )}
-                  <div className="md:col-span-2">
-                    <label className="text-neutral-3/70 text-sm">Address</label>
-                    <p className="text-neutral-3 font-semibold">
-                      {studentData.address}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-neutral-2 rounded-lg shadow-md p-6 text-center">
-                <p className="text-neutral-3/70">Loading profile data...</p>
-              </div>
-            )}
-          </div>
-        );
-
-      case "fee":
-        return (
-          <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
-              Fee Submission
-            </h2>
-            <div className="space-y-4">
-              {fees.length === 0 ? (
-                <div className="bg-neutral-2 rounded-lg shadow-md p-6 text-center">
-                  <p className="text-neutral-3/70">No fee records found</p>
-                </div>
-              ) : (
-                <>
-                  {fees
-                    .filter((f) => f.feeCategory !== "transport")
-                    .map((fee) => (
-                      <div
-                        key={fee._id}
-                        className="bg-neutral-2 rounded-lg shadow-md p-6"
-                      >
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <h3 className="text-lg font-semibold text-neutral-3">
-                              Fee Payment - {fee.feesType || "monthly"}
-                            </h3>
-                            <p className="text-sm text-neutral-3/70">
-                              Amount: ₹{fee.amount}
-                            </p>
-                            <p className="text-sm text-neutral-3/70">
-                              Due Date:{" "}
-                              {formatDateDDMMYYYY(fee.dueDate)}
-                            </p>
-                            {fee.month && (
-                              <p className="text-sm text-neutral-3/70">
-                                Month: {fee.month}
-                              </p>
-                            )}
-                            {fee.installmentNumber && (
-                              <p className="text-sm text-neutral-3/70">
-                                Installment: {fee.installmentNumber}
-                              </p>
-                            )}
-                            {fee.remarks && (
-                              <p className="text-sm text-neutral-3/70 mt-1">
-                                Remarks: {fee.remarks}
-                              </p>
-                            )}
-                          </div>
-                          <span
-                            className={`px-3 py-1 rounded text-sm ${
-                              fee.status === "paid"
-                                ? "bg-green-100 text-green-800"
-                                : fee.status === "overdue"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                            }`}
-                          >
-                            {fee.status.toUpperCase()}
-                          </span>
-                        </div>
-                        {fee.status === "paid" && (
-                          <div className="mt-4 p-3 bg-green-50 rounded">
-                            <p className="text-sm text-green-700">
-                              Paid on:{" "}
-                              {formatDateDDMMYYYY(fee.paidDate)}
-                            </p>
-                            {fee.paymentMethod && (
-                              <p className="text-sm text-green-700">
-                                Payment Method: {fee.paymentMethod}
-                              </p>
-                            )}
-                            {fee.transactionId && (
-                              <p className="text-sm text-green-700">
-                                Transaction ID: {fee.transactionId}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {fee.status === "pending" && (
-                          <button
-                            onClick={() => {
-                              const paymentMethod = prompt(
-                                "Enter payment method (e.g., Online, Cash, Cheque):",
-                              );
-                              const transactionId = prompt(
-                                "Enter transaction ID (if applicable):",
-                              );
-                              if (paymentMethod) {
-                                handlePayFee(fee._id, {
-                                  paymentMethod,
-                                  transactionId: transactionId || "",
-                                });
-                              }
-                            }}
-                            className="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
-                          >
-                            Pay Now
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  {fees.filter((f) => f.feeCategory === "transport").length >
-                    0 && (
-                    <div className="mt-6">
-                      <h3 className="text-xl font-semibold text-neutral-3 mb-4">
-                        Transport Fees
-                      </h3>
-                      {fees
-                        .filter((f) => f.feeCategory === "transport")
-                        .map((fee) => (
-                          <div
-                            key={fee._id}
-                            className="bg-neutral-2 rounded-lg shadow-md p-6 mb-4"
-                          >
-                            <div className="flex justify-between items-start mb-4">
-                              <div>
-                                <h3 className="text-lg font-semibold text-neutral-3">
-                                  Transport Fee - {fee.feesType || "monthly"}
-                                </h3>
-                                <p className="text-sm text-neutral-3/70">
-                                  Amount: ₹{fee.amount}
-                                </p>
-                                <p className="text-sm text-neutral-3/70">
-                                  Due Date:{" "}
-                                  {formatDateDDMMYYYY(fee.dueDate)}
-                                </p>
-                                {fee.month && (
-                                  <p className="text-sm text-neutral-3/70">
-                                    Month: {fee.month}
-                                  </p>
-                                )}
-                              </div>
-                              <span
-                                className={`px-3 py-1 rounded text-sm ${
-                                  fee.status === "paid"
-                                    ? "bg-green-100 text-green-800"
-                                    : fee.status === "overdue"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-yellow-100 text-yellow-800"
-                                }`}
-                              >
-                                {fee.status.toUpperCase()}
-                              </span>
-                            </div>
-                            {fee.status === "paid" && (
-                              <div className="mt-4 p-3 bg-green-50 rounded">
-                                <p className="text-sm text-green-700">
-                                  Paid on:{" "}
-                                  {formatDateDDMMYYYY(fee.paidDate)}
-                                </p>
-                                {fee.paymentMethod && (
-                                  <p className="text-sm text-green-700">
-                                    Payment Method: {fee.paymentMethod}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                            {fee.status === "pending" && (
-                              <button
-                                onClick={() => {
-                                  const paymentMethod = prompt(
-                                    "Enter payment method (e.g., Online, Cash, Cheque):",
-                                  );
-                                  const transactionId = prompt(
-                                    "Enter transaction ID (if applicable):",
-                                  );
-                                  if (paymentMethod) {
-                                    handlePayFee(fee._id, {
-                                      paymentMethod,
-                                      transactionId: transactionId || "",
-                                    });
-                                  }
-                                }}
-                                className="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
-                              >
-                                Pay Now
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                  {fines.length > 0 && (
-                    <div className="mt-6">
-                      <h3 className="text-xl font-semibold text-neutral-3 mb-4">
-                        Fines
-                      </h3>
-                      {fines.map((fine) => (
-                        <div
-                          key={fine._id}
-                          className={`bg-neutral-2 rounded-lg shadow-md p-6 mb-4 border-l-4 ${fine.fineType === "late" ? "border-red-500" : "border-orange-500"}`}
-                        >
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <div className="flex items-center space-x-2 mb-2">
-                                <h3 className="text-lg font-semibold text-neutral-3">
-                                  Fine
-                                </h3>
-                                {fine.fineType === "late" && (
-                                  <span className="px-2 py-1 rounded text-xs bg-red-100 text-red-800">
-                                    Late Fine
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-sm text-neutral-3/70">
-                                Amount: ₹{fine.amount}
-                              </p>
-                              <p className="text-sm text-neutral-3/70">
-                                Reason: {fine.reason}
-                              </p>
-                              <p className="text-sm text-neutral-3/70">
-                                Due Date:{" "}
-                                {formatDateDDMMYYYY(fine.dueDate)}
-                              </p>
-                              {fine.remarks && (
-                                <p className="text-sm text-neutral-3/70 mt-1">
-                                  Remarks: {fine.remarks}
-                                </p>
-                              )}
-                            </div>
-                            <span
-                              className={`px-3 py-1 rounded text-sm ${
-                                fine.status === "paid"
-                                  ? "bg-green-100 text-green-800"
-                                  : fine.status === "overdue"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-yellow-100 text-yellow-800"
-                              }`}
-                            >
-                              {fine.status.toUpperCase()}
-                            </span>
-                          </div>
-                          {fine.status === "paid" && (
-                            <div className="mt-4 p-3 bg-green-50 rounded">
-                              <p className="text-sm text-green-700">
-                                Paid on:{" "}
-                                {formatDateDDMMYYYY(fine.paidDate)}
-                              </p>
-                              {fine.paymentMethod && (
-                                <p className="text-sm text-green-700">
-                                  Payment Method: {fine.paymentMethod}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                          {fine.status === "pending" && (
-                            <button
-                              onClick={async () => {
-                                const paymentMethod = prompt(
-                                  "Enter payment method (e.g., Online, Cash, Cheque):",
-                                );
-                                const transactionId = prompt(
-                                  "Enter transaction ID (if applicable):",
-                                );
-                                if (paymentMethod) {
-                                  try {
-                                    await axios.put(
-                                      `${API_BASE_URL}/api/fines/${fine._id}/pay`,
-                                      {
-                                        paymentMethod,
-                                        transactionId: transactionId || "",
-                                      },
-                                    );
-                                    fetchData();
-                                    alert(
-                                      "Fine payment submitted successfully!",
-                                    );
-                                  } catch (error) {
-                                    console.error("Error paying fine:", error);
-                                    alert("Error submitting payment");
-                                  }
-                                }
-                              }}
-                              className="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition"
-                            >
-                              Pay Now
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        );
-
-      case "notifications":
-        return (
-          <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
-              Notifications
-            </h2>
-            <div className="space-y-4">
-              {notifications.length === 0 ? (
-                <div className="bg-neutral-2 rounded-lg shadow-md p-6 text-center">
-                  <p className="text-neutral-3/70">No notifications</p>
-                </div>
-              ) : (
-                notifications.map((notification) => (
-                  <div
-                    key={notification._id}
-                    className="bg-neutral-2 rounded-lg shadow-md p-6 border-l-4 border-secondary"
-                  >
-                    <h3 className="font-semibold text-neutral-3 mb-2">
-                      {notification.title}
-                    </h3>
-                    <p className="text-sm text-neutral-3/70 mb-2">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-neutral-3/50">
-                      {formatDateDDMMYYYY(notification.createdAt)}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        );
-
-      case "classTeacher":
-        return (
-          <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">
-              Class Teacher
-            </h2>
-            {classTeacher ? (
-              <div className="bg-neutral-2 rounded-lg shadow-md p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Teacher Name
-                    </label>
-                    <p className="text-neutral-3 font-semibold text-lg">
-                      {classTeacher.teacherId?.name || "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">Email</label>
-                    <p className="text-neutral-3 font-semibold">
-                      {classTeacher.teacherId?.email || "Not Set"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">
-                      Contact Number
-                    </label>
-                    <p className="text-neutral-3 font-semibold">
-                      {classTeacher.teacherId?.phone || "Not Set"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-neutral-3/70 text-sm">Class</label>
-                    <p className="text-neutral-3 font-semibold">
-                      {classTeacher.className}{" "}
-                      {classTeacher.section ? `- ${classTeacher.section}` : ""}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-neutral-2 rounded-lg shadow-md p-6 text-center">
-                <p className="text-neutral-3/70">No class teacher assigned</p>
-              </div>
-            )}
-          </div>
-        );
-
-      case "events":
-        return (
-          <div>
-            <h2 className="text-2xl font-bold text-neutral-3 mb-6">Events</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {events.length === 0 ? (
-                <div className="bg-neutral-2 rounded-lg shadow-md p-6 text-center md:col-span-2">
-                  <p className="text-neutral-3/70">No upcoming events</p>
-                </div>
-              ) : (
-                events.map((event) => (
-                  <div
-                    key={event._id}
-                    className="bg-neutral-2 rounded-lg shadow-md p-6 border-l-4 border-secondary"
-                  >
-                    <h3 className="font-semibold text-neutral-3 mb-2">
-                      {event.title}
-                    </h3>
-                    <p className="text-sm text-neutral-3/70 mb-2">
-                      {event.description}
-                    </p>
-                    <div className="space-y-1">
-                      <p className="text-xs text-neutral-3/50">
-                        <FiCalendar className="inline mr-1" />
-                        {formatDateDDMMYYYY(event.date)}
-                      </p>
-                      {event.location && (
-                        <p className="text-xs text-neutral-3/50">
-                          <FiClock className="inline mr-1" />
-                          {event.location}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        );
-
+        return <StudentProfile studentData={studentData} user={user} />;
+      case "exams":
+        return <StudentExams studentData={studentData} />;
+      case "attendance":
+        return <StudentAttendance user={user} />;
+      case "fees":
+        return <StudentFeeView fees={fees} fines={fines} />;
+      case "assignments":
+        return <AssignmentManagement user={user} studentData={studentData} />;
+      case "leaves":
+        return <LeaveManagement user={user} />;
+      case "library":
+        return <StudentLibraryView />;
+      case "circulars":
+        return <CircularView />;
       default:
         return null;
     }
   };
 
   return (
-    <div className="ui-dashboard-shell">
+    <div className="min-h-screen bg-neutral-1 flex flex-col">
       <Header />
-      <div className="flex-grow">
-        <div className="ui-dashboard-main">
-          <div className="ui-dashboard-hero">
-            <h1 className="text-3xl font-bold text-slate-900">
-              Dashboard
-            </h1>
-            <p className="mt-1 text-sm text-slate-600 sm:text-base">
-              Welcome back, {user?.name}
-            </p>
-            {studentData?.class && (
-              <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-                Class {studentData.class}
-              </p>
-            )}
+      <div className="flex-1 flex overflow-hidden">
+        <aside className={`${isSidebarOpen ? "w-72" : "w-20"} bg-white border-r border-neutral-1 transition-all duration-300 flex flex-col z-40`}>
+          <div className="p-6 flex items-center justify-between">
+            {isSidebarOpen && <span className="font-black text-xl tracking-tighter text-neutral-3">STUDENT<span className="text-primary">.</span></span>}
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-neutral-1 rounded-xl transition text-neutral-3"><FiMenu /></button>
           </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
-            {dashboardStats.map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <article
-                  key={item.label}
-                  className="ui-stat-card ui-fade-up"
-                  style={{ animationDelay: `${index * 60}ms` }}
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {item.label}
-                    </p>
-                    <Icon className="text-secondary" />
-                  </div>
-                  <p className="mt-2 text-3xl font-bold text-slate-900">
-                    {item.value}
-                  </p>
-                  {item.hint && (
-                    <p className="mt-1 text-xs text-slate-500 leading-snug">
-                      {item.hint}
-                    </p>
-                  )}
-                </article>
-              );
-            })}
+          <nav className="flex-1 px-4 space-y-2">
+            {menuItems.map(item => (
+              <button 
+                key={item.id} 
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 ${activeTab === item.id ? "bg-primary text-white shadow-lg shadow-primary/20 scale-[1.02]" : "text-neutral-3/60 hover:bg-neutral-1 hover:text-neutral-3"}`}
+              >
+                <span className="text-xl">{item.icon}</span>
+                {isSidebarOpen && <span className="font-bold tracking-wide">{item.label}</span>}
+              </button>
+            ))}
+          </nav>
+          <div className="p-4">
+            <button onClick={logout} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-red-500 hover:bg-red-50 transition-colors font-bold">
+              <FiLogOut className="text-xl" />
+              {isSidebarOpen && <span>Logout</span>}
+            </button>
           </div>
+        </aside>
 
-          <div className="ui-dashboard-tabs">
-            <div className="ui-dashboard-tab-row">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`ui-dashboard-tab ${
-                      activeTab === tab.id ? "ui-dashboard-tab-active" : ""
-                    }`}
-                  >
-                    <Icon />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {renderContent()}
-        </div>
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto p-8 bg-[#F8F9FA]">
+          <div className="max-w-6xl mx-auto">{renderContent()}</div>
+        </main>
       </div>
       <Footer />
     </div>
   );
 };
+
+const StatCard = ({ label, value, icon, color }) => (
+  <div className={`${color} p-6 rounded-2xl shadow-sm border border-black/5 flex items-center gap-4 hover:translate-y-[-2px] transition-transform`}>
+    <div className="p-3 bg-white rounded-xl shadow-sm text-xl">{icon}</div>
+    <div>
+      <p className="text-[10px] font-bold text-neutral-3/50 uppercase tracking-widest">{label}</p>
+      <p className="text-2xl font-black text-neutral-3">{value}</p>
+    </div>
+  </div>
+);
+
+const StudentFeeView = ({ fees, fines }) => (
+  <div className="space-y-6 animate-fadeIn">
+    <h2 className="text-2xl font-bold text-neutral-3">My Fee Ledger</h2>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="space-y-4">
+        <h3 className="font-bold text-neutral-3/60 px-2 uppercase text-xs tracking-widest">Fees</h3>
+        {fees.map(f => (
+          <div key={f._id} className="bg-neutral-2 p-5 rounded-2xl border border-neutral-1 flex justify-between items-center shadow-sm">
+            <div>
+              <p className="font-bold text-neutral-3 capitalize">{f.feesType} Fee</p>
+              <p className="text-xs opacity-50">{f.month || "Annual"}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-black text-lg">₹{f.amount}</p>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${f.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                {f.status}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-4">
+        <h3 className="font-bold text-neutral-3/60 px-2 uppercase text-xs tracking-widest">Fines</h3>
+        {fines.map(f => (
+          <div key={f._id} className="bg-neutral-2 p-5 rounded-2xl border border-red-100 flex justify-between items-center shadow-sm">
+            <div>
+              <p className="font-bold text-red-600">Late Fine</p>
+              <p className="text-xs opacity-50">{f.reason || "Late payment"}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-black text-lg">₹{f.amount}</p>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${f.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {f.status}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
 
 export default StudentDashboard;

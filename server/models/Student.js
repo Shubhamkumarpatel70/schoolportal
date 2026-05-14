@@ -4,11 +4,13 @@ const studentSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   studentName: {
     type: String,
-    required: true
+    required: true,
+    index: true
   },
   fathersName: {
     type: String,
@@ -24,12 +26,12 @@ const studentSchema = new mongoose.Schema({
   },
   class: {
     type: String,
-    required: true
+    required: true,
+    index: true
   },
   rollNumber: {
     type: String,
-    required: true,
-    unique: true
+    required: true
   },
   enrollmentNumber: {
     type: String,
@@ -59,6 +61,8 @@ const studentSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+studentSchema.index({ class: 1, rollNumber: 1 }, { unique: true });
 
 module.exports = mongoose.model('Student', studentSchema);
 

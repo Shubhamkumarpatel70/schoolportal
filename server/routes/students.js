@@ -2,7 +2,7 @@ const express = require('express');
 const Student = require('../models/Student');
 const User = require('../models/User');
 const ClassTeacher = require('../models/ClassTeacher');
-const { auth } = require('../middleware/auth');
+const { auth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -31,7 +31,7 @@ router.get('/', auth, async (req, res) => {
 // Search students (Admin/Accountant only)
 router.get('/search', auth, async (req, res) => {
   try {
-    if (!['admin', 'accountant'].includes(req.user.role)) {
+    if (!['admin', 'accountant', 'librarian', 'receptionist'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' });
     }
     const { q } = req.query;
@@ -50,6 +50,16 @@ router.get('/search', auth, async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+// Specific Search (By Class & Roll)
+router.get('/search-specific', auth, async (req, res) => {
+  try {
+    const { className, rollNumber } = req.query;
+    const student = await Student.findOne({ class: className, rollNumber }).populate('userId', 'name email');
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+    res.json(student);
+  } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
 // Get student by ID
@@ -209,6 +219,20 @@ router.delete('/:id', auth, async (req, res) => {
     res.json({ message: 'Student deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Bulk Promote Students
+router.post('/bulk-promote', auth, authorize('admin'), async (req, res) => {
+  try {
+    const { sourceClass, targetClass } = req.body;
+    await Student.updateMany(
+      { class: sourceClass },
+      { $set: { class: targetClass } }
+    );
+    res.json({ message: 'Students promoted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error promoting students' });
   }
 });
 

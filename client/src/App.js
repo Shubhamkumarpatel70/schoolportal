@@ -20,6 +20,8 @@ import AdminDashboard from './pages/dashboards/AdminDashboard';
 import StudentDashboard from './pages/dashboards/StudentDashboard';
 import TeacherDashboard from './pages/dashboards/TeacherDashboard';
 import AccountantDashboard from './pages/dashboards/AccountantDashboard';
+import LibrarianDashboard from './pages/dashboards/LibrarianDashboard';
+import ReceptionistDashboard from './pages/dashboards/ReceptionistDashboard';
 
 function App() {
   return (
@@ -68,6 +70,22 @@ function App() {
             element={
               <PrivateRoute>
                 <AccountantDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/librarian/dashboard"
+            element={
+              <PrivateRoute>
+                <LibrarianDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/receptionist/dashboard"
+            element={
+              <PrivateRoute>
+                <ReceptionistDashboard />
               </PrivateRoute>
             }
           />

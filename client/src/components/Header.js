@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FiChevronRight, FiGrid, FiLogOut, FiMenu, FiUser, FiX } from 'react-icons/fi';
+import { FiChevronRight, FiGrid, FiLogOut, FiMenu, FiUser, FiX, FiUserPlus } from 'react-icons/fi';
+import AdmissionForm from './AdmissionForm';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/api';
 
@@ -11,6 +12,8 @@ const Header = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
+  const [admissionConfig, setAdmissionConfig] = useState(null);
+  const [showAdmissionModal, setShowAdmissionModal] = useState(false);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -26,6 +29,15 @@ const Header = () => {
       }
     };
     fetchAnnouncements();
+
+    const fetchAdmissionConfig = async () => {
+        try {
+            const res = await axios.get(`${API_BASE_URL}/api/admissions/config`);
+            setAdmissionConfig(res.data);
+        } catch (e) { console.error(e); }
+    };
+    fetchAdmissionConfig();
+
     const intervalId = setInterval(fetchAnnouncements, 60000);
     return () => clearInterval(intervalId);
   }, []);
@@ -79,6 +91,24 @@ const Header = () => {
               {item.label}
             </NavLink>
           ))}
+          {admissionConfig?.isOpen && admissionConfig?.displayType === 'navbar' && (
+              <button 
+                onClick={() => setShowAdmissionModal(true)}
+                className="bg-primary text-white px-5 py-2.5 rounded-full text-[11px] font-black animate-pulse shadow-xl shadow-primary/30 hover:scale-105 transition-all hidden xl:flex items-center gap-2 uppercase tracking-tight"
+              >
+                  <FiUserPlus className="text-sm" />
+                  <span>ADMISSION OPEN {admissionConfig.session}</span>
+              </button>
+          )}
+          {admissionConfig?.isOpen && admissionConfig?.displayType === 'navbar' && (
+              <button 
+                onClick={() => setShowAdmissionModal(true)}
+                className="bg-primary text-white p-2.5 rounded-full text-sm font-black animate-pulse shadow-lg shadow-primary/20 hover:scale-105 transition-all xl:hidden"
+                title="Admission Open"
+              >
+                  <FiUserPlus />
+              </button>
+          )}
         </div>
 
         <div className="hidden items-center gap-3 lg:flex">
@@ -153,6 +183,19 @@ const Header = () => {
               </NavLink>
             ))}
 
+            {admissionConfig?.isOpen && admissionConfig?.displayType === 'navbar' && (
+              <button 
+                onClick={() => {
+                  setShowAdmissionModal(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-between px-4 py-4 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 animate-pulse"
+              >
+                  <span>NEW ADMISSION {admissionConfig.session}</span>
+                  <FiUserPlus />
+              </button>
+            )}
+
             <div className="my-1 h-px bg-slate-200" />
             {user ? (
               <>
@@ -212,6 +255,13 @@ const Header = () => {
           }
         `}
       </style>
+      {showAdmissionModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 md:p-10 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+             <div className="bg-white w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden animate-slideUp relative flex flex-col">
+                <AdmissionForm session={admissionConfig?.session} onClose={() => setShowAdmissionModal(false)} />
+             </div>
+          </div>
+      )}
     </header>
   );
 };
